@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+OMA_BIN=${OMA_BIN:-/usr/bin/oma}
+
+usage(){ cat <<'EOF'
+Usages:
+  omactl run [--wait] [--follow] [--unit=<name>] -- <oma-args...>
+  omactl status <unit>
+  omactl logs|log <unit>
+  omactl cancel|stop <unit>
+  omactl result|rc <unit>
+  omactl list
+EOF
+}
+
+die(){ echo "[omactl] error: $*" >&2; exit 1; }
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  run)
+    unit="oma-task-$(date +%Y%m%d%H%M%S)-$RANDOM"
+    wait=0; follow=0
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --wait) wait=1;;
+        --follow) follow=1;;
+        --unit=*) unit="${1#--unit=}";;
+        --) shift; break;;
+        *) break;;
+      esac; shift || true
+    done
+    args=("$@")
+    # transient service
+    run_args=(
+      --unit="$unit"
+      --collect
+      -p Type=exec
+      -p KillMode=control-group
+      -p Restart=no
+      -p StandardOutput=journal
+      -p StandardError=journal
+      -p WorkingDirectory=/
+      -p PrivateTmp=yes
+    )
+    (( wait )) && run_args+=(--wait --pipe)
+
+    systemd-run "${run_args[@]}" "$OMA_BIN" "${args[@]}"
+    echo "unit=$unit"
+    (( follow )) && journalctl -fu "$unit"
+    ;;
+  status)
+    systemctl status "${1:?unit?}" --no-pager
+    ;;
+  logs|log)
+    journalctl -u "${1:?unit?}" -e
+    ;;
+  cancel|stop)
+    systemctl stop "${1:?unit?}"
+    ;;
+  result|rc)
+    systemctl show "${1:?unit?}" -p Result -p ExecMainStatus -p ActiveState -p SubState
+    ;;
+  list)
+    systemctl list-units 'oma-task-*'
+    ;;
+  *) usage; exit 1;;
+esac
