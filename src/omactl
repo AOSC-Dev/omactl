@@ -37,6 +37,8 @@ case "$cmd" in
       --collect
       -p Type=exec
       -p KillMode=control-group
+      -p KillSignal=SIGINT
+      -p TimeoutStopSec=120
       -p Restart=no
       -p StandardOutput=journal
       -p StandardError=journal
