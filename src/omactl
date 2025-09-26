@@ -49,7 +49,7 @@ case "$cmd" in
 
     systemd-run "${run_args[@]}" "$OMA_BIN" "${args[@]}"
     echo "unit=$unit"
-    (( follow )) && journalctl -fu "$unit"
+    (( follow )) && journalctl -fu "$unit" || true
     ;;
   status)
     systemctl status "${1:?unit?}" --no-pager
