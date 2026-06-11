@@ -16,7 +16,9 @@ omactl MUST expose aoska-facing package-management capabilities through `capabil
 
 `omactl plan <operation> --json [args...]` MUST be reserved for read-only computation of package operations that would be performed.
 
-`omactl run <operation> --json [args...]` MUST be reserved for scheduling package-changing operations.
+`omactl run <operation> --json [args...]` MUST be reserved for scheduling package-management operations that may change package state, package metadata state, or other oma-managed operation state.
+
+Refresh and check-update operations scheduled through `omactl run refresh` MUST be treated as long-running package-management operations even when they do not install, remove, or upgrade packages.
 
 `omactl status --json <unit>` MUST return machine-readable status for a unit started by omactl.
 
