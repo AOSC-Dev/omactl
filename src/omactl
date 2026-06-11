@@ -53,6 +53,14 @@ fail_json(){
 
 is_json_flag(){ [[ "${1:-}" == "--json" ]]; }
 
+has_json_arg(){
+  local arg
+  for arg in "$@"; do
+    [[ "$arg" == "--json" ]] && return 0
+  done
+  return 1
+}
+
 require_python(){
   command -v python3 >/dev/null 2>&1 || fail_json INTERNAL_ERROR "python3 is required for JSON output"
 }
@@ -134,6 +142,7 @@ record_unit(){
 
 owned_unit(){
   local unit=$1 record show id invocation load_state stored_invocation stored_unit
+  valid_omactl_unit_name "$unit" || return 1
   record="$(unit_record "$unit")"
   [[ -f "$record" && ! -L "$record" ]] || return 1
   stored_unit=$(record_field "$record" unit)
@@ -155,6 +164,7 @@ systemd_unit_exists(){
 require_owned_unit(){
   local unit=${1:-}
   require_unit "$unit"
+  valid_omactl_unit_name "$unit" || fail_json UNKNOWN_UNIT "unit was not started by omactl" "{\"unit\":$(json_escape "$unit")}"
   owned_unit "$unit" || fail_json UNKNOWN_UNIT "unit was not started by omactl" "{\"unit\":$(json_escape "$unit")}"
 }
 
@@ -216,11 +226,21 @@ def status_tokens(value):
             tokens.append(token)
     return tokens
 items = []
-for raw in sys.stdin:
-    raw = raw.strip()
-    if not raw:
-        continue
-    value = json.loads(raw)
+text = sys.stdin.read()
+if text.strip():
+    try:
+        parsed = json.loads(text)
+        values = [parsed]
+    except json.JSONDecodeError:
+        values = []
+        for raw in text.splitlines():
+            raw = raw.strip()
+            if not raw:
+                continue
+            values.append(json.loads(raw))
+else:
+    values = []
+for value in values:
     if isinstance(value, list):
         items.extend(value)
     else:
@@ -324,6 +344,9 @@ capabilities_json(){
     fi
     if command -v systemd-run >/dev/null 2>&1; then
       caps+=("run.upgrade.v1" "run.install.v1" "run.remove.v1" "run.refresh.v1")
+      if command -v python3 >/dev/null 2>&1; then
+        caps+=("run.upgrade.selected.v1")
+      fi
     fi
   fi
   if command -v python3 >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1; then
@@ -712,7 +735,7 @@ case "$cmd" in
     plan_json "$@"
     ;;
   run)
-    if [[ "${1:-}" =~ ^(upgrade|install|remove|refresh)$ && " $* " == *" --json "* ]]; then
+    if has_json_arg "$@"; then
       run_json "$@"
     else
       legacy_run "$@"
