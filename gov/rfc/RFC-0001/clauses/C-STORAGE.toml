@@ -16,19 +16,22 @@ text = """
 
 Storage output MUST include `data.estimated` as a boolean.
 
+Storage output MUST include at least one concrete storage section: `data.filesystems` as a non-empty array, `data.packages` as a non-empty array, or both.
+
+Storage output MUST NOT consist only of `data.estimated` without a concrete storage section.
+
 Storage output MUST set `data.estimated` to `true` when any reported size is approximate, partially available, derived from package metadata that may be stale, or not measured from the filesystem at the time of the query.
 
 Storage output MUST set `data.estimated` to `false` only when all reported sizes are measured or otherwise exact for the query time.
 
-Storage output SHOULD include `data.filesystems` as an array when filesystem capacity information is available.
+Storage output MAY include `data.filesystems` as an array when filesystem capacity information is available.
 
 Each filesystem entry SHOULD include `mount`, `total_bytes`, `used_bytes`, and `available_bytes` when those values are available.
 
-Storage output SHOULD include `data.packages` as an array when installed package size information is available.
+Storage output MAY include `data.packages` as an array when installed package size information is available.
 
 Each package storage entry SHOULD include `name`, `architecture`, `installed_size_bytes`, and `estimated` when those values are available.
 
-omactl MUST NOT advertise `query.storage.v1` unless it can produce the JSON envelope and estimate markers required by this clause.
+omactl MUST NOT advertise `query.storage.v1` unless it can produce the JSON envelope, estimate markers, and at least one concrete storage section required by this clause.
 
-**Rationale:** Storage summaries are useful for aoska but are not required for the initial package-management migration; explicit estimate markers prevent UI from presenting approximate package sizes as exact accounting.
-"""
+**Rationale:** Storage summaries are useful for aoska but are not required for the initial package-management migration; explicit estimate markers prevent UI from presenting approximate package sizes as exact accounting."""

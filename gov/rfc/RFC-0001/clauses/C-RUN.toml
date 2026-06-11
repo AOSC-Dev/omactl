@@ -34,8 +34,8 @@ Scheduling success output MUST include `data.operation` as one of `upgrade`, `in
 
 `omactl run` MUST return scheduling failure synchronously when no unit is scheduled.
 
-`omactl run` MUST reject a package-changing operation with error code `OMA_BUSY` when `/run/lock/oma.lock` exists or when omactl can otherwise determine that an oma package-changing operation is active.
+`omactl run` MUST reject a package-management operation with error code `OMA_BUSY` when `/run/lock/oma.lock` exists or when omactl can otherwise determine that an oma package-management operation is active.
 
-`omactl run` MAY support concurrent package-changing operations only after advertising a future capability that explicitly permits concurrency.
+`omactl run` MAY support concurrent package-management operations only after advertising a future capability that explicitly permits concurrency.
 
-**Rationale:** Package-changing operations need privilege, lifetime, cancellation, and logging boundaries that belong outside the GUI process."""
+**Rationale:** Package-management operations need privilege, lifetime, cancellation, and logging boundaries that belong outside the GUI process."""

@@ -14,7 +14,17 @@ text = """
 
 `omactl plan upgrade --json <package>...` MUST return kind `omactl.plan.upgrade` when selected-upgrade planning is supported.
 
-Selected-upgrade planning output MUST identify requested package names that cannot be upgraded when that information is available from machine-readable oma output.
+Selected-upgrade planning output for a non-empty package list MUST include `data.selection` as an object.
+
+Selected-upgrade planning output for a non-empty package list MUST include `data.selection.requested` as an array containing the requested package names in request order.
+
+Selected-upgrade planning output for a non-empty package list MUST include `data.selection.not_upgradable` as an array containing requested package names that are known to exist but cannot be upgraded.
+
+Selected-upgrade planning output for a non-empty package list MUST include `data.selection.not_found` as an array containing requested package names that are not found in available package metadata.
+
+Selected-upgrade planning MUST return a successful JSON response and exit status `0` when omactl can produce a valid plan, even when `data.selection.not_upgradable` or `data.selection.not_found` is non-empty.
+
+Selected-upgrade planning MUST return a failed JSON response and a non-zero exit status when omactl cannot determine the selected-upgrade plan or required selection fields from machine-readable oma output.
 
 Selected-upgrade planning output MUST NOT silently plan unrelated package upgrades except dependencies, removals, or related operations required by the package manager to complete the selected upgrade.
 
@@ -30,11 +40,18 @@ Scheduling success for selected-upgrade execution MUST return kind `omactl.opera
 
 Scheduling success for selected-upgrade execution MUST include `data.operation` as `upgrade`.
 
-Scheduling success for selected-upgrade execution SHOULD include `data.selection` as the selected package-name array when the request used a non-empty package list.
+Scheduling success for selected-upgrade execution for a non-empty package list MUST include `data.selection` as an object.
+
+Scheduling success for selected-upgrade execution for a non-empty package list MUST include `data.selection.requested` as an array containing the requested package names in request order.
+
+Scheduling success for selected-upgrade execution for a non-empty package list MUST include `data.selection.not_upgradable` as an array when omactl performed pre-scheduling selection validation; otherwise it MUST be an empty array.
+
+Scheduling success for selected-upgrade execution for a non-empty package list MUST include `data.selection.not_found` as an array when omactl performed pre-scheduling selection validation; otherwise it MUST be an empty array.
+
+Selected-upgrade execution MUST reject the request with error code `INVALID_ARGUMENTS`, a non-zero exit status, and `error.details.selection` containing `requested`, `not_upgradable`, and `not_found` arrays when pre-scheduling validation determines that every requested package is either not found or not upgradable.
 
 omactl MUST NOT advertise `plan.upgrade.selected.v1` unless selected-upgrade planning satisfies this clause.
 
 omactl MUST NOT advertise `run.upgrade.selected.v1` unless selected-upgrade execution satisfies this clause.
 
-**Rationale:** aoska needs both "update all" and user-selected update flows, and scripts must be able to distinguish all-upgrade requests from selected-upgrade requests without relying on ambiguous option ordering.
-"""
+**Rationale:** aoska needs both "update all" and user-selected update flows, and scripts must be able to distinguish all-upgrade requests from selected-upgrade requests without relying on ambiguous option ordering."""

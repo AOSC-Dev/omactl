@@ -8,15 +8,21 @@ status = "active"
 
 [content]
 text = """
-`omactl run refresh --json [--unit <unit>]` MUST schedule a metadata refresh or check-update operation through a systemd transient unit.
+`omactl run refresh --json --purpose <refresh|check-updates> [--unit <unit>]` MUST schedule a metadata refresh or check-update operation through a systemd transient unit.
 
-`omactl run refresh --json [--unit <unit>]` MUST return kind `omactl.operation.started` on scheduling success.
+`omactl run refresh --json` MUST reject a missing or invalid `--purpose` value with error code `INVALID_ARGUMENTS`.
+
+The `refresh` purpose MUST mean refreshing package metadata for general package-management use.
+
+The `check-updates` purpose MUST mean refreshing or validating package metadata specifically before checking for available updates.
+
+`omactl run refresh --json --purpose <refresh|check-updates> [--unit <unit>]` MUST return kind `omactl.operation.started` on scheduling success.
 
 Refresh scheduling success output MUST include `data.unit` as the scheduled systemd unit name.
 
 Refresh scheduling success output MUST include `data.operation` as `refresh`.
 
-Refresh scheduling success output SHOULD include `data.purpose` as `check-update` when the refresh is intended to update package metadata before an update check.
+Refresh scheduling success output MUST include `data.purpose` as either `refresh` or `check-updates`, matching the requested purpose.
 
 Refresh operations MUST use the status, result, and logs inspection surfaces defined for omactl-owned units.
 
@@ -30,7 +36,6 @@ Refresh operations MUST use the status, result, and logs inspection surfaces def
 
 omactl MUST return scheduling failure synchronously when no refresh unit is scheduled.
 
-omactl MUST reject a refresh operation with error code `OMA_BUSY` when `/run/lock/oma.lock` exists or when omactl can otherwise determine that an oma package-changing or refresh operation is active.
+omactl MUST reject a refresh operation with error code `OMA_BUSY` when `/run/lock/oma.lock` exists or when omactl can otherwise determine that an oma package-management operation is active.
 
-**Rationale:** aoska needs a cancellable checking state that is observable through the same operation lifecycle as installs, removals, and upgrades.
-"""
+**Rationale:** aoska needs a cancellable checking state that is observable through the same operation lifecycle as installs, removals, and upgrades."""

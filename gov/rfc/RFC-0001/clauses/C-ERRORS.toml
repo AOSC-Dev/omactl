@@ -12,11 +12,11 @@ Machine-readable errors MUST include a stable error code.
 
 Machine-readable errors MUST include a human-readable message.
 
-omactl MUST use error code `INVALID_ARGUMENTS` for syntactically invalid commands, missing required arguments, empty package lists where a package list is required, invalid unit names, or caller-provided unit-name collisions.
+omactl MUST use error code `INVALID_ARGUMENTS` for syntactically invalid commands, missing required arguments, empty package lists where a package list is required, invalid unit names, caller-provided unit-name collisions, or selected-upgrade requests that are rejected before scheduling because no requested package can be upgraded.
 
 omactl MUST use error code `UNSUPPORTED_COMMAND` for valid omactl syntax that requests an unsupported aoska-facing capability.
 
-omactl MUST use error code `OMA_BUSY` when a package-changing operation is rejected because another oma operation is active.
+omactl MUST use error code `OMA_BUSY` when a package-management operation is rejected because another oma package-management operation is active.
 
 omactl MUST use error code `AUTHORIZATION_FAILED` when permission or privilege acquisition fails.
 
@@ -39,6 +39,8 @@ Error details for `SYSTEMD_FAILED` SHOULD include `unit` and `systemd_message` w
 Error details for `OMA_EXEC_FAILED` SHOULD include `exit_status` when available.
 
 Error details for `INVALID_ARGUMENTS` SHOULD include `argument` when one argument caused the failure.
+
+Error details for selected-upgrade `INVALID_ARGUMENTS` failures MUST include `selection` when the failure is caused by all requested packages being known before scheduling as not found or not upgradable.
 
 Read-only query and planning commands MUST exit with status `0` only when the JSON response represents a successful query or plan.
 
