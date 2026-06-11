@@ -2,66 +2,388 @@
 set -Eeuo pipefail
 
 OMA_BIN=${OMA_BIN:-/usr/bin/oma}
+OMACTL_VERSION=${OMACTL_VERSION:-0.1.0}
 
 usage(){ cat <<'EOF'
 Usages:
+  omactl capabilities --json
+  omactl query installed|upgradable|package-detail|search --json [args...]
+  omactl run <upgrade|install|remove|refresh> --json [--unit <name>] [--yes] [args...]
   omactl run [--wait] [--follow] [--unit=<name>] -- <oma-args...>
-  omactl status <unit>
-  omactl logs|log <unit>
-  omactl cancel|stop <unit>
-  omactl result|rc <unit>
+  omactl status [--json] <unit>
+  omactl logs|log [--json] [--follow] <unit>
+  omactl cancel|stop [--json] <unit>
+  omactl result|rc [--json] <unit>
   omactl list
 EOF
 }
 
 die(){ echo "[omactl] error: $*" >&2; exit 1; }
 
+json_escape(){
+  local s=${1-}
+  s=${s//\\/\\\\}
+  s=${s//"/\\"}
+  s=${s//$'\n'/\\n}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\t'/\\t}
+  printf '"%s"' "$s"
+}
+
+json_ok(){
+  local kind=$1 data=${2:-}
+  [[ -n "$data" ]] || data='{}'
+  printf '{"schema_version":1,"ok":true,"kind":%s,"data":%s}\n' "$(json_escape "$kind")" "$data"
+}
+
+json_error(){
+  local code=$1 message=$2 details=${3:-}
+  [[ -n "$details" ]] || details='{}'
+  printf '{"schema_version":1,"ok":false,"kind":"omactl.error","error":{"code":%s,"message":%s,"details":%s}}\n' \
+    "$(json_escape "$code")" "$(json_escape "$message")" "$details"
+}
+
+fail_json(){
+  local code=$1 message=$2 details=${3:-}
+  [[ -n "$details" ]] || details='{}'
+  json_error "$code" "$message" "$details"
+  exit 1
+}
+
+is_json_flag(){ [[ "${1:-}" == "--json" ]]; }
+
+valid_unit_name(){
+  local unit=$1
+  [[ ${#unit} -ge 1 && ${#unit} -le 80 && "$unit" =~ ^[A-Za-z0-9_.@-]+$ && "$unit" == oma-task-* ]]
+}
+
+require_unit(){
+  local unit=${1:-}
+  [[ -n "$unit" ]] || fail_json INVALID_ARGUMENTS "missing unit" '{"argument":"unit"}'
+  valid_unit_name "$unit" || fail_json INVALID_ARGUMENTS "invalid unit name" '{"argument":"unit"}'
+}
+
+generate_unit(){
+  if [[ -n "${OMACTL_UNIT_SEED:-}" ]]; then
+    printf 'oma-task-%s.service' "$OMACTL_UNIT_SEED"
+  else
+    printf 'oma-task-%s-%s.service' "$(date +%Y%m%d%H%M%S)" "$RANDOM"
+  fi
+}
+
+oma_busy(){
+  [[ "${OMACTL_DISABLE_BUSY_CHECK:-}" == "1" ]] && return 1
+  [[ -e /run/lock/oma.lock ]]
+}
+
+python_or_malformed(){
+  python3 "$@" || return 1
+}
+
+wrap_json_items(){
+  local kind=$1 key=$2
+  python_or_malformed -c '
+import json, sys
+kind, key = sys.argv[1], sys.argv[2]
+items = []
+for raw in sys.stdin:
+    raw = raw.strip()
+    if not raw:
+        continue
+    value = json.loads(raw)
+    if isinstance(value, list):
+        items.extend(value)
+    else:
+        items.append(value)
+for item in items:
+    if isinstance(item, dict):
+        status = item.get("status") or []
+        if isinstance(status, str):
+            status_values = {status}
+        else:
+            status_values = set(status)
+        item.setdefault("installed", "installed" in status_values)
+        item.setdefault("upgradable", "upgradable" in status_values)
+        item.setdefault("held", "held" in status_values)
+        item.setdefault("automatic", "automatic" in status_values)
+print(json.dumps({"packages": items} if key == "packages" else {"results": items}, separators=(",", ":")))
+' "$kind" "$key" | {
+    local data
+    IFS= read -r data
+    json_ok "$kind" "$data"
+  }
+}
+
+lines_to_logs_json(){
+  local unit=$1
+  python_or_malformed -c '
+import json, sys
+unit = sys.argv[1]
+lines = [line.rstrip("\n") for line in sys.stdin]
+print(json.dumps({"unit": unit, "lines": lines}, separators=(",", ":")))
+' "$unit"
+}
+
+systemd_show_json(){
+  local unit=$1
+  python_or_malformed -c '
+import json, sys
+unit = sys.argv[1]
+fields = {}
+for raw in sys.stdin:
+    raw = raw.rstrip("\n")
+    if "=" in raw:
+        key, value = raw.split("=", 1)
+        fields[key] = value
+active = fields.get("ActiveState", "unknown")
+sub = fields.get("SubState", "")
+result = fields.get("Result", "")
+if active == "active":
+    state = "running"
+elif active == "activating":
+    state = "pending"
+elif result == "success" or active == "inactive":
+    state = "succeeded"
+elif result in {"canceled", "cancelled"} or sub in {"stop-sigterm", "stop-sigint"}:
+    state = "cancelled"
+elif active == "failed" or result not in {"", "success"}:
+    state = "failed"
+else:
+    state = "unknown"
+print(json.dumps({"unit": unit, "state": state, "systemd": fields}, separators=(",", ":")))
+' "$unit"
+}
+
+capabilities_json(){
+  local oma_path="" oma_version=""
+  if command -v "$OMA_BIN" >/dev/null 2>&1 || [[ -x "$OMA_BIN" ]]; then
+    oma_path=$(command -v "$OMA_BIN" 2>/dev/null || printf '%s' "$OMA_BIN")
+    oma_version=$("$OMA_BIN" --version 2>/dev/null | head -n1 || true)
+  fi
+  local caps='["query.installed.v1","query.upgradable.v1","query.package-detail.v1","query.search.v1","run.upgrade.v1","run.upgrade.selected.v1","run.install.v1","run.remove.v1","run.refresh.v1","unit.status.v1","unit.result.v1","unit.logs.v1","unit.cancel.v1"]'
+  local data
+  data=$(printf '{"omactl_version":%s,"oma_path":%s,"oma_version":%s,"capabilities":%s}' \
+    "$(json_escape "$OMACTL_VERSION")" "$(json_escape "$oma_path")" "$(json_escape "$oma_version")" "$caps")
+  json_ok omactl.capabilities "$data"
+}
+
+query_json(){
+  local topic=${1:-}; shift || true
+  case "$topic" in
+    installed)
+      [[ "${1:-}" == "--json" ]] || die "query installed requires --json"
+      if ! "$OMA_BIN" list --installed --json | wrap_json_items omactl.query.installed packages; then
+        fail_json MALFORMED_DELEGATE_OUTPUT "failed to parse delegated oma JSON"
+      fi
+      ;;
+    upgradable)
+      [[ "${1:-}" == "--json" ]] || die "query upgradable requires --json"
+      if ! "$OMA_BIN" list --upgradable --json | wrap_json_items omactl.query.upgradable packages; then
+        fail_json MALFORMED_DELEGATE_OUTPUT "failed to parse delegated oma JSON"
+      fi
+      ;;
+    package-detail)
+      [[ "${1:-}" == "--json" ]] || die "query package-detail requires --json"
+      shift
+      [[ $# -gt 0 ]] || fail_json INVALID_ARGUMENTS "package-detail requires at least one package" '{"argument":"package"}'
+      if ! "$OMA_BIN" show --json "$@" | wrap_json_items omactl.query.package-detail packages; then
+        fail_json MALFORMED_DELEGATE_OUTPUT "failed to parse delegated oma JSON"
+      fi
+      ;;
+    search)
+      [[ "${1:-}" == "--json" ]] || die "query search requires --json"
+      shift
+      [[ $# -gt 0 ]] || fail_json INVALID_ARGUMENTS "search requires at least one term" '{"argument":"term"}'
+      if ! "$OMA_BIN" search --json "$@" | wrap_json_items omactl.query.search results; then
+        fail_json MALFORMED_DELEGATE_OUTPUT "failed to parse delegated oma JSON"
+      fi
+      ;;
+    *) fail_json UNSUPPORTED_COMMAND "unsupported query topic" "{\"topic\":$(json_escape "$topic")}";;
+  esac
+}
+
+legacy_run(){
+  local unit="$(generate_unit)" wait=0 follow=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --wait) wait=1;;
+      --follow) follow=1;;
+      --unit=*) unit="${1#--unit=}";;
+      --) shift; break;;
+      *) break;;
+    esac; shift || true
+  done
+  args=("$@")
+  run_args=(
+    --unit="$unit"
+    --collect
+    -p Type=exec
+    -p KillMode=control-group
+    -p KillSignal=SIGINT
+    -p TimeoutStopSec=120
+    -p Restart=no
+    -p StandardOutput=journal
+    -p StandardError=journal
+    -p WorkingDirectory=/
+    -p PrivateTmp=yes
+  )
+  (( wait )) && run_args+=(--wait --pipe)
+  systemd-run "${run_args[@]}" "$OMA_BIN" "${args[@]}"
+  echo "unit=$unit"
+  (( follow )) && journalctl -fu "$unit" || true
+}
+
+run_json(){
+  local operation=${1:-}; shift || true
+  local json=0 unit="" yes=0 remove_config=0 purpose="" passthrough=0
+  local packages=()
+  while [[ $# -gt 0 ]]; do
+    if (( passthrough )); then packages+=("$1"); shift; continue; fi
+    case "$1" in
+      --json) json=1;;
+      --unit) shift; unit=${1:-};;
+      --unit=*) unit=${1#--unit=};;
+      --yes|-y) yes=1;;
+      --remove-config|--remove_config) remove_config=1;;
+      --purpose) shift; purpose=${1:-};;
+      --) passthrough=1;;
+      *) packages+=("$1");;
+    esac
+    shift || true
+  done
+  (( json )) || die "run <operation> requires --json"
+  [[ -n "$unit" ]] || unit="$(generate_unit)"
+  require_unit "$unit"
+  oma_busy && fail_json OMA_BUSY "oma is busy"
+  local oma_args=()
+  case "$operation" in
+    install)
+      [[ ${#packages[@]} -gt 0 ]] || fail_json INVALID_ARGUMENTS "install requires at least one package" '{"argument":"package"}'
+      oma_args=(install)
+      (( yes )) && oma_args+=(--yes)
+      oma_args+=("${packages[@]}")
+      ;;
+    remove)
+      [[ ${#packages[@]} -gt 0 ]] || fail_json INVALID_ARGUMENTS "remove requires at least one package" '{"argument":"package"}'
+      oma_args=(remove)
+      (( yes )) && oma_args+=(--yes)
+      (( remove_config )) && oma_args+=(--remove-config)
+      oma_args+=("${packages[@]}")
+      ;;
+    upgrade)
+      oma_args=(upgrade)
+      (( yes )) && oma_args+=(--yes)
+      oma_args+=("${packages[@]}")
+      ;;
+    refresh)
+      [[ "$purpose" == "refresh" || "$purpose" == "check-updates" ]] || fail_json INVALID_ARGUMENTS "refresh requires --purpose refresh|check-updates" '{"argument":"purpose"}'
+      oma_args=(refresh)
+      ;;
+    *) fail_json UNSUPPORTED_COMMAND "unsupported run operation" "{\"operation\":$(json_escape "$operation")}";;
+  esac
+  local run_args=(
+    --unit="$unit"
+    --collect
+    -p Type=exec
+    -p KillMode=control-group
+    -p KillSignal=SIGINT
+    -p TimeoutStopSec=120
+    -p Restart=no
+    -p StandardOutput=journal
+    -p StandardError=journal
+    -p WorkingDirectory=/
+    -p PrivateTmp=yes
+  )
+  if ! systemd-run "${run_args[@]}" "$OMA_BIN" "${oma_args[@]}" >/dev/null; then
+    fail_json SYSTEMD_FAILED "failed to schedule systemd unit" "{\"unit\":$(json_escape "$unit")}"
+  fi
+  local data
+  data=$(printf '{"unit":%s,"operation":%s' "$(json_escape "$unit")" "$(json_escape "$operation")")
+  if [[ "$operation" == "refresh" ]]; then
+    data+=",\"purpose\":$(json_escape "$purpose")"
+  fi
+  if [[ "$operation" == "upgrade" && ${#packages[@]} -gt 0 ]]; then
+    local requested="$(printf '%s\n' "${packages[@]}" | python3 -c 'import json,sys; print(json.dumps([x.rstrip("\n") for x in sys.stdin]))')"
+    data+=",\"selection\":{\"requested\":$requested,\"not_upgradable\":[],\"not_found\":[]}"
+  fi
+  data+='}'
+  json_ok omactl.operation.started "$data"
+}
+
+status_json(){
+  local unit=$1
+  require_unit "$unit"
+  local data
+  if ! data=$(systemctl show "$unit" -p ActiveState -p SubState -p Result -p ExecMainStatus -p Id | systemd_show_json "$unit"); then
+    fail_json SYSTEMD_FAILED "failed to inspect systemd unit" "{\"unit\":$(json_escape "$unit")}"
+  fi
+  json_ok omactl.unit.status "$data"
+}
+
+result_json(){
+  local unit=$1
+  require_unit "$unit"
+  local data
+  if ! data=$(systemctl show "$unit" -p ActiveState -p SubState -p Result -p ExecMainStatus -p Id | systemd_show_json "$unit"); then
+    fail_json SYSTEMD_FAILED "failed to inspect systemd unit" "{\"unit\":$(json_escape "$unit")}"
+  fi
+  json_ok omactl.unit.result "$data"
+}
+
+logs_json(){
+  local follow=0
+  if [[ "${1:-}" == "--follow" ]]; then follow=1; shift; fi
+  local unit=$1
+  require_unit "$unit"
+  if (( follow )); then
+    journalctl -u "$unit" -f -o cat --no-pager | while IFS= read -r line; do
+      json_ok omactl.unit.log-line "{\"unit\":$(json_escape "$unit"),\"line\":$(json_escape "$line")}"
+    done
+  else
+    local data
+    if ! data=$(journalctl -u "$unit" -o cat --no-pager | lines_to_logs_json "$unit"); then
+      fail_json SYSTEMD_FAILED "failed to read unit logs" "{\"unit\":$(json_escape "$unit")}"
+    fi
+    json_ok omactl.unit.logs "$data"
+  fi
+}
+
+cancel_json(){
+  local unit=$1
+  require_unit "$unit"
+  if ! systemctl stop "$unit" >/dev/null; then
+    fail_json SYSTEMD_FAILED "failed to cancel systemd unit" "{\"unit\":$(json_escape "$unit")}"
+  fi
+  json_ok omactl.unit.cancel "{\"unit\":$(json_escape "$unit"),\"state\":\"cancelled\"}"
+}
+
 cmd="${1:-}"; shift || true
 case "$cmd" in
+  capabilities)
+    [[ "${1:-}" == "--json" ]] || { usage; exit 1; }
+    capabilities_json
+    ;;
+  query)
+    query_json "$@"
+    ;;
   run)
-    unit="oma-task-$(date +%Y%m%d%H%M%S)-$RANDOM"
-    wait=0; follow=0
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --wait) wait=1;;
-        --follow) follow=1;;
-        --unit=*) unit="${1#--unit=}";;
-        --) shift; break;;
-        *) break;;
-      esac; shift || true
-    done
-    args=("$@")
-    # transient service
-    run_args=(
-      --unit="$unit"
-      --collect
-      -p Type=exec
-      -p KillMode=control-group
-      -p KillSignal=SIGINT
-      -p TimeoutStopSec=120
-      -p Restart=no
-      -p StandardOutput=journal
-      -p StandardError=journal
-      -p WorkingDirectory=/
-      -p PrivateTmp=yes
-    )
-    (( wait )) && run_args+=(--wait --pipe)
-
-    systemd-run "${run_args[@]}" "$OMA_BIN" "${args[@]}"
-    echo "unit=$unit"
-    (( follow )) && journalctl -fu "$unit" || true
+    if [[ "${1:-}" =~ ^(upgrade|install|remove|refresh)$ ]]; then
+      run_json "$@"
+    else
+      legacy_run "$@"
+    fi
     ;;
   status)
-    systemctl status "${1:?unit?}" --no-pager
+    if [[ "${1:-}" == "--json" ]]; then shift; status_json "${1:-}"; else systemctl status "${1:?unit?}" --no-pager; fi
     ;;
   logs|log)
-    journalctl -u "${1:?unit?}" -e
+    if [[ "${1:-}" == "--json" ]]; then shift; logs_json "$@"; else journalctl -u "${1:?unit?}" -e; fi
     ;;
   cancel|stop)
-    systemctl stop "${1:?unit?}"
+    if [[ "${1:-}" == "--json" ]]; then shift; cancel_json "${1:-}"; else systemctl stop "${1:?unit?}"; fi
     ;;
   result|rc)
-    systemctl show "${1:?unit?}" -p Result -p ExecMainStatus -p ActiveState -p SubState
+    if [[ "${1:-}" == "--json" ]]; then shift; result_json "${1:-}"; else systemctl show "${1:?unit?}" -p Result -p ExecMainStatus -p ActiveState -p SubState; fi
     ;;
   list)
     systemctl list-units 'oma-task-*'
