@@ -16,6 +16,7 @@ The aoska-facing API is available with explicit `--json` flags.
 ./src/omactl query package-detail --json oma
 ./src/omactl run install --json --yes htop
 ./src/omactl status --json oma-task-example.service
+./src/omactl result --json oma-task-example.service
 ./src/omactl logs --json oma-task-example.service
 ./src/omactl cancel --json oma-task-example.service
 ```
@@ -33,6 +34,20 @@ All JSON document outputs use a schema-v1 envelope:
 
 Error outputs use the same envelope shape with `ok: false` and a stable
 `error.code`.
+
+omactl delegates package facts to oma. The current JSON API advertises only the
+capabilities that can be implemented from these delegated oma JSON commands:
+
+- `oma list --installed --json` with at least `name`, `architecture`, and
+  `current_version`.
+- `oma list --upgradable --json` with at least `name`, `architecture`,
+  `current_version`, and `new_version`.
+- `oma show --json <package>...` with at least `name`.
+- `oma search --json <term>...` with at least `name`.
+
+Planning/TUM APIs are intentionally not advertised yet. Until oma exposes a
+machine-readable transaction plan, `omactl plan ... --json` returns an
+`UNSUPPORTED_COMMAND` error envelope instead of scraping human output.
 
 ## Run human-oriented tasks
 
