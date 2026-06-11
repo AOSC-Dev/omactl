@@ -124,6 +124,9 @@ PY
             f"""
             #!/usr/bin/env bash
             set -euo pipefail
+            if [[ "${{1:-}}" == "--version" ]]; then
+              exit 0
+            fi
             echo "systemd-run:$*" >> {self.calls!s}
             python3 - "$@" > {self.systemd_args!s} <<'PY'
 import json
@@ -139,6 +142,12 @@ PY
             #!/usr/bin/env bash
             set -euo pipefail
             echo "systemctl:$*" >> {self.calls!s}
+            if [[ "${{SYSTEMD_FAKE_MODE:-}}" == "unreachable" ]]; then
+              exit 1
+            fi
+            if [[ "${{1:-}}" == "--version" ]]; then
+              exit 0
+            fi
             if [[ "${{1:-}}" == "show" ]]; then
               unit="${{2:-}}"
               echo "Id=$unit"
@@ -279,6 +288,18 @@ PY
         self.remove_tool_from_path("systemctl")
         proc = self.run_omactl("capabilities", "--json")
         self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stderr, "")
+        payload = self.load_json(proc)
+        caps = payload["data"]["capabilities"]
+        self.assertNotIn("run.install.v1", caps)
+        self.assertNotIn("run.upgrade.selected.v1", caps)
+        self.assertNotIn("unit.logs.v1", caps)
+
+    def test_capabilities_do_not_advertise_run_or_logs_when_systemctl_unreachable(self):
+        self.env["SYSTEMD_FAKE_MODE"] = "unreachable"
+        proc = self.run_omactl("capabilities", "--json")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stderr, "")
         payload = self.load_json(proc)
         caps = payload["data"]["capabilities"]
         self.assertNotIn("run.install.v1", caps)
@@ -435,6 +456,14 @@ PY
     def test_run_requires_systemctl_before_scheduling(self):
         self.remove_tool_from_path("systemctl")
         proc = self.run_omactl("run", "install", "--json", "--unit", "oma-task-nosystemctl.service", "nano")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "SYSTEMD_FAILED")
+        self.assertFalse(self.systemd_args.exists())
+
+    def test_run_requires_reachable_systemctl_before_scheduling(self):
+        self.env["SYSTEMD_FAKE_MODE"] = "unreachable"
+        proc = self.run_omactl("run", "install", "--json", "--unit", "oma-task-badsystemctl.service", "nano")
         self.assertNotEqual(proc.returncode, 0)
         payload = self.load_json(proc)
         self.assertEqual(payload["error"]["code"], "SYSTEMD_FAILED")
