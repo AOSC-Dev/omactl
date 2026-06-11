@@ -428,6 +428,7 @@ run_json(){
   (( json )) || die "run <operation> requires --json"
   [[ -n "$unit" ]] || unit="$(generate_unit)"
   require_unit "$unit"
+  ensure_state_dir
   reject_unit_collision "$unit"
   oma_busy && fail_json OMA_BUSY "oma is busy"
   local oma_args=()

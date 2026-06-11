@@ -390,6 +390,7 @@ PY
         payload = self.load_json(proc)
         self.assertEqual(payload["error"]["code"], "INTERNAL_ERROR")
         self.assertFalse(self.systemd_args.exists())
+        self.assertFalse(self.systemd_args.exists())
 
     def test_run_upgrade_selected_reports_selection(self):
         proc = self.run_omactl("run", "upgrade", "--json", "--unit", "oma-task-selected.service", "nano")
