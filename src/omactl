@@ -66,7 +66,9 @@ require_python(){
 }
 
 systemctl_available(){
-  command -v systemctl >/dev/null 2>&1 && systemctl --version >/dev/null 2>&1
+  command -v systemctl >/dev/null 2>&1 &&
+    systemctl --version >/dev/null 2>&1 &&
+    systemctl list-units --all --full --plain --no-legend >/dev/null 2>&1
 }
 
 systemd_run_available(){
