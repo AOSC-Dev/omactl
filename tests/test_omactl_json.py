@@ -52,6 +52,22 @@ class OmactlJsonTests(unittest.TestCase):
               echo '{{'
               exit 0
             fi
+            if [[ "${{OMA_FAKE_MODE:-}}" == "pretty-json" ]]; then
+              python3 - <<'PY'
+import json
+print(json.dumps([
+    dict(
+        name="nano",
+        branches=["stable"],
+        current_version="7.2",
+        new_version=None,
+        architecture="amd64",
+        status=["installed"],
+    )
+], indent=2))
+PY
+              exit 0
+            fi
             if [[ "${{OMA_FAKE_MODE:-}}" == "missing-field" ]]; then
               echo '{{"name":"broken"}}'
               exit 0
@@ -236,7 +252,7 @@ PY
         self.assertIn("query.installed.v1", payload["data"]["capabilities"])
         self.assertNotIn("query.search.v1", payload["data"]["capabilities"])
         self.assertNotIn("plan.upgrade.v1", payload["data"]["capabilities"])
-        self.assertNotIn("run.upgrade.selected.v1", payload["data"]["capabilities"])
+        self.assertIn("run.upgrade.selected.v1", payload["data"]["capabilities"])
 
     def test_capabilities_do_not_advertise_oma_backed_queries_when_oma_missing(self):
         self.env["OMA_BIN"] = str(self.bin / "missing-oma")
@@ -275,6 +291,15 @@ PY
         self.assertTrue(payload["data"]["packages"][1]["upgradable"])
         self.assertTrue(payload["data"]["packages"][1]["automatic"])
         self.assertFalse(payload["data"]["packages"][0]["held"])
+
+    def test_query_installed_wraps_pretty_single_json_document(self):
+        self.env["OMA_FAKE_MODE"] = "pretty-json"
+        proc = self.run_omactl("query", "installed", "--json")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["kind"], "omactl.query.installed")
+        self.assertEqual(payload["data"]["packages"][0]["name"], "nano")
+        self.assertNotIn("new_version", payload["data"]["packages"][0])
 
     def test_query_installed_omits_empty_new_version(self):
         self.env["OMA_FAKE_MODE"] = "empty-new-version"
@@ -445,6 +470,13 @@ PY
         self.assertEqual(payload["data"]["operation"], "upgrade")
         self.assertEqual(payload["data"]["selection"]["requested"], ["nano"])
 
+    def test_run_json_unsupported_operation_returns_json_error(self):
+        proc = self.run_omactl("run", "bogus", "--json")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "UNSUPPORTED_COMMAND")
+        self.assertFalse(self.systemd_args.exists())
+
     def test_plan_group_returns_structured_unsupported_command(self):
         proc = self.run_omactl("plan", "upgrade", "--json")
         self.assertNotEqual(proc.returncode, 0)
@@ -505,6 +537,29 @@ PY
         self.assertNotEqual(proc.returncode, 0)
         payload = self.load_json(proc)
         self.assertEqual(payload["error"]["code"], "UNKNOWN_UNIT")
+
+    def test_forged_non_omactl_unit_record_never_reaches_systemd_or_journal(self):
+        record = Path(self.env["OMACTL_STATE_DIR"]) / "units" / "ssh.service"
+        record.write_text(
+            "unit=ssh.service\noperation=install\ninvocation_id=invocation-ssh.service\n",
+            encoding="utf-8",
+        )
+
+        for args in [
+            ("status", "--json", "ssh.service"),
+            ("result", "--json", "ssh.service"),
+            ("logs", "--json", "ssh.service"),
+            ("cancel", "--json", "ssh.service"),
+        ]:
+            with self.subTest(args=args):
+                self.calls.write_text("", encoding="utf-8")
+                proc = self.run_omactl(*args)
+                self.assertNotEqual(proc.returncode, 0)
+                payload = self.load_json(proc)
+                self.assertEqual(payload["error"]["code"], "UNKNOWN_UNIT")
+                calls = self.calls.read_text(encoding="utf-8")
+                self.assertNotIn("systemctl:", calls)
+                self.assertNotIn("journalctl:", calls)
 
     def test_logs_json_returns_lines(self):
         proc = self.run_omactl("logs", "--json", "oma-task-test.service")
