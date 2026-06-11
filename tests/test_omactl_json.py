@@ -242,6 +242,19 @@ PY
         except json.JSONDecodeError as exc:
             self.fail(f"stdout was not JSON: {proc.stdout!r}; stderr={proc.stderr!r}; {exc}")
 
+    def remove_tool_from_path(self, tool: str) -> None:
+        no_tool = self.root / f"no-{tool}"
+        no_tool.mkdir()
+        for name in ["bash", "python3", "oma", "systemd-run", "journalctl"]:
+            source = self.bin / name
+            if source.exists() and name != tool:
+                (no_tool / name).symlink_to(source)
+        (no_tool / "bash").unlink(missing_ok=True)
+        (no_tool / "bash").symlink_to("/bin/bash")
+        (no_tool / "python3").unlink(missing_ok=True)
+        (no_tool / "python3").symlink_to("/usr/bin/python3")
+        self.env["PATH"] = str(no_tool)
+
     def test_capabilities_json_envelope(self):
         proc = self.run_omactl("capabilities", "--json")
         self.assertEqual(proc.returncode, 0, proc.stderr)
@@ -261,6 +274,16 @@ PY
         payload = self.load_json(proc)
         self.assertNotIn("query.installed.v1", payload["data"]["capabilities"])
         self.assertNotIn("run.install.v1", payload["data"]["capabilities"])
+
+    def test_capabilities_do_not_advertise_run_or_logs_without_systemctl(self):
+        self.remove_tool_from_path("systemctl")
+        proc = self.run_omactl("capabilities", "--json")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = self.load_json(proc)
+        caps = payload["data"]["capabilities"]
+        self.assertNotIn("run.install.v1", caps)
+        self.assertNotIn("run.upgrade.selected.v1", caps)
+        self.assertNotIn("unit.logs.v1", caps)
 
     def test_capabilities_empty_set_returns_valid_json(self):
         no_tools = self.root / "no-tools"
@@ -408,6 +431,14 @@ PY
         self.assertNotEqual(proc.returncode, 0)
         payload = self.load_json(proc)
         self.assertEqual(payload["error"]["code"], "INVALID_ARGUMENTS")
+
+    def test_run_requires_systemctl_before_scheduling(self):
+        self.remove_tool_from_path("systemctl")
+        proc = self.run_omactl("run", "install", "--json", "--unit", "oma-task-nosystemctl.service", "nano")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "SYSTEMD_FAILED")
+        self.assertFalse(self.systemd_args.exists())
 
     def test_legacy_run_still_accepts_oma_args_without_json_mode(self):
         proc = self.run_omactl("run", "install", "--yes", "nano")
