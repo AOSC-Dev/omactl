@@ -57,15 +57,26 @@ require_python(){
   command -v python3 >/dev/null 2>&1 || fail_json INTERNAL_ERROR "python3 is required for JSON output"
 }
 
-valid_unit_name(){
+valid_unit_syntax(){
   local unit=$1
-  [[ ${#unit} -ge 1 && ${#unit} -le 80 && "$unit" =~ ^[A-Za-z0-9_.@-]+$ && "$unit" == oma-task-* ]]
+  [[ ${#unit} -ge 1 && ${#unit} -le 80 && "$unit" =~ ^[A-Za-z0-9_.@-]+$ ]]
+}
+
+valid_omactl_unit_name(){
+  local unit=$1
+  [[ "$unit" == oma-task-* ]] && valid_unit_syntax "$unit"
 }
 
 require_unit(){
   local unit=${1:-}
   [[ -n "$unit" ]] || fail_json INVALID_ARGUMENTS "missing unit" '{"argument":"unit"}'
-  valid_unit_name "$unit" || fail_json INVALID_ARGUMENTS "invalid unit name" '{"argument":"unit"}'
+  valid_unit_syntax "$unit" || fail_json INVALID_ARGUMENTS "invalid unit name" '{"argument":"unit"}'
+}
+
+require_omactl_unit(){
+  local unit=${1:-}
+  [[ -n "$unit" ]] || fail_json INVALID_ARGUMENTS "missing unit" '{"argument":"unit"}'
+  valid_omactl_unit_name "$unit" || fail_json INVALID_ARGUMENTS "invalid unit name" '{"argument":"unit"}'
 }
 
 unit_dir(){
@@ -230,7 +241,7 @@ for item in items:
         if item.get("automatic") is True:
             status_values.add("automatic")
         item["status"] = ",".join(sorted(status_values))
-        if item.get("new_version") is None:
+        if item.get("new_version") in (None, ""):
             item.pop("new_version", None)
         elif not isinstance(item.get("new_version"), str):
             raise ValueError("invalid new_version for {}".format(item.get("name", "<unknown>")))
@@ -322,7 +333,11 @@ capabilities_json(){
     caps+=("unit.logs.v1")
   fi
   local caps_json
-  caps_json=$(printf '%s\n' "${caps[@]}" | python3 -c 'import json,sys; print(json.dumps([x.strip() for x in sys.stdin if x.strip()]))' 2>/dev/null || printf '[]')
+  if [[ ${#caps[@]} -eq 0 ]]; then
+    caps_json='[]'
+  else
+    caps_json=$(printf '%s\n' "${caps[@]}" | python3 -c 'import json,sys; print(json.dumps([x.strip() for x in sys.stdin if x.strip()]))' 2>/dev/null || printf '[]')
+  fi
   local data
   data=$(printf '{"omactl_version":%s,"oma_path":%s,"oma_version":%s,"capabilities":%s}' \
     "$(json_escape "$OMACTL_VERSION")" "$(json_escape "$oma_path")" "$(json_escape "$oma_version")" "$caps_json")
@@ -435,7 +450,7 @@ run_json(){
   done
   (( json )) || die "run <operation> requires --json"
   [[ -n "$unit" ]] || unit="$(generate_unit)"
-  require_unit "$unit"
+  require_omactl_unit "$unit"
   local oma_args=()
   case "$operation" in
     install)

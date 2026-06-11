@@ -64,6 +64,10 @@ class OmactlJsonTests(unittest.TestCase):
               echo '{{"name":"broken","branches":["stable"],"current_version":"1","architecture":"amd64","new_version":42,"status":["installed"]}}'
               exit 0
             fi
+            if [[ "${{OMA_FAKE_MODE:-}}" == "empty-new-version" ]]; then
+              echo '{{"name":"nano","branches":["stable"],"current_version":"7.2","new_version":"","architecture":"amd64","status":["installed"]}}'
+              exit 0
+            fi
             if [[ "${{OMA_FAKE_MODE:-}}" == "scalar" ]]; then
               echo '"not-an-object"'
               exit 0
@@ -242,6 +246,17 @@ PY
         self.assertNotIn("query.installed.v1", payload["data"]["capabilities"])
         self.assertNotIn("run.install.v1", payload["data"]["capabilities"])
 
+    def test_capabilities_empty_set_returns_valid_json(self):
+        no_tools = self.root / "no-tools"
+        no_tools.mkdir()
+        (no_tools / "bash").symlink_to("/bin/bash")
+        self.env["PATH"] = str(no_tools)
+        self.env["OMA_BIN"] = str(no_tools / "missing-oma")
+        proc = self.run_omactl("capabilities", "--json")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["data"]["capabilities"], [])
+
     def test_query_installed_wraps_json_lines(self):
         proc = self.run_omactl("query", "installed", "--json")
         self.assertEqual(proc.returncode, 0, proc.stderr)
@@ -260,6 +275,14 @@ PY
         self.assertTrue(payload["data"]["packages"][1]["upgradable"])
         self.assertTrue(payload["data"]["packages"][1]["automatic"])
         self.assertFalse(payload["data"]["packages"][0]["held"])
+
+    def test_query_installed_omits_empty_new_version(self):
+        self.env["OMA_FAKE_MODE"] = "empty-new-version"
+        proc = self.run_omactl("query", "installed", "--json")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = self.load_json(proc)
+        self.assertNotIn("new_version", payload["data"]["packages"][0])
+        self.assertFalse(payload["data"]["packages"][0]["upgradable"])
 
     def test_query_upgradable_wraps_json_lines(self):
         proc = self.run_omactl("query", "upgradable", "--json")
@@ -473,6 +496,12 @@ PY
 
     def test_status_json_rejects_unknown_oma_task_unit(self):
         proc = self.run_omactl("status", "--json", "oma-task-unknown.service")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "UNKNOWN_UNIT")
+
+    def test_status_json_rejects_non_omactl_unit_as_unknown(self):
+        proc = self.run_omactl("status", "--json", "ssh.service")
         self.assertNotEqual(proc.returncode, 0)
         payload = self.load_json(proc)
         self.assertEqual(payload["error"]["code"], "UNKNOWN_UNIT")
