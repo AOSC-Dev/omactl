@@ -12,7 +12,7 @@ Machine-readable errors MUST include a stable error code.
 
 Machine-readable errors MUST include a human-readable message.
 
-omactl MUST use error code `INVALID_ARGUMENTS` for syntactically invalid commands, missing required arguments, empty package lists, invalid unit names, or caller-provided unit-name collisions.
+omactl MUST use error code `INVALID_ARGUMENTS` for syntactically invalid commands, missing required arguments, empty package lists where a package list is required, invalid unit names, or caller-provided unit-name collisions.
 
 omactl MUST use error code `UNSUPPORTED_COMMAND` for valid omactl syntax that requests an unsupported aoska-facing capability.
 

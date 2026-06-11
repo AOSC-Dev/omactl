@@ -1,0 +1,40 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-CANCEL"
+title = "Operation Cancellation"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+`omactl cancel --json <unit>` MUST request cancellation for an omactl-owned unit.
+
+`omactl cancel --json <unit>` MUST return kind `omactl.unit.cancel` when the cancellation request is accepted or when the unit is already terminal.
+
+Cancellation output MUST include `data.unit` as the unit name.
+
+Cancellation output MUST include `data.state` as one of `cancelling`, `cancelled`, or `already_terminal`.
+
+Cancellation output SHOULD include `data.previous_state` when omactl knew the unit state before requesting cancellation.
+
+omactl MUST return error code `UNKNOWN_UNIT` when the requested unit was not started by omactl.
+
+omactl MUST return error code `UNKNOWN_UNIT` for non-omactl systemd units even when systemd could otherwise stop those units.
+
+omactl MUST return error code `SYSTEMD_FAILED` when systemd rejects a stop request for an omactl-owned non-terminal unit.
+
+After a cancellation request is accepted, later `status --json` and `result --json` calls MUST map systemd states that indicate a caller-requested stop to `data.state = "cancelled"` when omactl can distinguish the cancellation from ordinary failure.
+
+If omactl cannot distinguish a caller-requested stop from an ordinary failure, `result --json` MUST preserve the raw systemd fields that caused the ambiguity under `data.systemd`.
+
+A terminal state of `cancelled` MUST be used for a unit stopped by `omactl cancel --json <unit>`.
+
+A terminal state of `failed` MUST be used for a unit that completed with a non-zero operation failure and was not known to be caller-cancelled.
+
+A terminal state of `succeeded` MUST be used for a unit that completed successfully.
+
+A terminal state of `unknown` MUST be used only when omactl cannot map the retained unit state to `pending`, `running`, `succeeded`, `failed`, or `cancelled`.
+
+**Rationale:** aoska needs cancel buttons that can target only operations it owns and needs terminal states that distinguish user cancellation from package-manager failure.
+"""

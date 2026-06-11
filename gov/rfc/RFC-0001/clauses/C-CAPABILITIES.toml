@@ -18,12 +18,20 @@ The `data` object for `omactl.capabilities` MUST include `oma_version` as a stri
 
 The `data` object for `omactl.capabilities` MUST include `capabilities` as an array of stable ASCII strings.
 
-The initial aoska-facing capability identifiers MUST include `query.upgradable.v1`, `query.package-detail.v1`, `plan.upgrade.v1`, `plan.install.v1`, `plan.remove.v1`, `run.upgrade.v1`, `run.install.v1`, `run.remove.v1`, `unit.status.v1`, `unit.result.v1`, and `unit.logs.v1` when the corresponding command is supported.
+The initial aoska-facing capability identifiers MUST include `query.upgradable.v1`, `query.installed.v1`, `query.package-detail.v1`, `plan.upgrade.v1`, `plan.install.v1`, `plan.remove.v1`, `run.upgrade.v1`, `run.install.v1`, `run.remove.v1`, `run.refresh.v1`, `unit.status.v1`, `unit.result.v1`, `unit.logs.v1`, and `unit.cancel.v1` when the corresponding command is supported.
 
 The capability identifier `query.search.v1` MAY be advertised when live package search is supported.
 
+The capability identifier `query.storage.v1` MAY be advertised when optional storage summary output is supported.
+
 The capability identifier `plan.tum.v1` MUST be advertised when planning output can include TUM matching and security-update classification.
 
+The capability identifier `plan.upgrade.selected.v1` MUST be advertised when `omactl plan upgrade --json <package>...` supports a non-empty package list for selected-upgrade planning.
+
+The capability identifier `run.upgrade.selected.v1` MUST be advertised when `omactl run upgrade --json <package>...` supports a non-empty package list for selected-upgrade execution.
+
 omactl MUST NOT advertise a capability identifier unless the command and payload requirements for that capability are satisfied.
+
+omactl MUST NOT advertise `plan.tum.v1`, `plan.upgrade.v1`, `plan.upgrade.selected.v1`, `run.upgrade.selected.v1`, or any other plan capability merely because a human-oriented dry-run or operation command exists.
 
 **Rationale:** Capability discovery gives aoska a programmatic compatibility gate without hard-coding omactl or oma version numbers."""

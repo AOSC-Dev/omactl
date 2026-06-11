@@ -1,0 +1,34 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-STORAGE"
+title = "Optional Storage Summary"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+`omactl query storage --json` MAY be implemented as a P2 optional capability.
+
+`omactl query storage --json` MUST return kind `omactl.query.storage` when `query.storage.v1` is advertised.
+
+`omactl query storage --json` MUST NOT modify package state.
+
+Storage output MUST include `data.estimated` as a boolean.
+
+Storage output MUST set `data.estimated` to `true` when any reported size is approximate, partially available, derived from package metadata that may be stale, or not measured from the filesystem at the time of the query.
+
+Storage output MUST set `data.estimated` to `false` only when all reported sizes are measured or otherwise exact for the query time.
+
+Storage output SHOULD include `data.filesystems` as an array when filesystem capacity information is available.
+
+Each filesystem entry SHOULD include `mount`, `total_bytes`, `used_bytes`, and `available_bytes` when those values are available.
+
+Storage output SHOULD include `data.packages` as an array when installed package size information is available.
+
+Each package storage entry SHOULD include `name`, `architecture`, `installed_size_bytes`, and `estimated` when those values are available.
+
+omactl MUST NOT advertise `query.storage.v1` unless it can produce the JSON envelope and estimate markers required by this clause.
+
+**Rationale:** Storage summaries are useful for aoska but are not required for the initial package-management migration; explicit estimate markers prevent UI from presenting approximate package sizes as exact accounting.
+"""

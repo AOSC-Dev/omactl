@@ -8,7 +8,7 @@ status = "active"
 
 [content]
 text = """
-`omactl run upgrade --json [--unit <unit>] [--yes] [-- <oma-args>...]` MUST schedule an upgrade operation through a systemd transient unit.
+`omactl run upgrade --json [--unit <unit>] [--yes] [package]...` MUST schedule an upgrade operation through a systemd transient unit.
 
 `omactl run install --json [--unit <unit>] [--yes] <package>...` MUST schedule an install operation through a systemd transient unit.
 
@@ -30,7 +30,7 @@ text = """
 
 Scheduling success output MUST include `data.unit` as the scheduled systemd unit name.
 
-Scheduling success output MUST include `data.operation` as one of `upgrade`, `install`, or `remove`.
+Scheduling success output MUST include `data.operation` as one of `upgrade`, `install`, `remove`, or `refresh`.
 
 `omactl run` MUST return scheduling failure synchronously when no unit is scheduled.
 
