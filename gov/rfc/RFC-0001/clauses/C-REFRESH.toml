@@ -1,0 +1,36 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-REFRESH"
+title = "Refresh and Check-Update Operations"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+`omactl run refresh --json [--unit <unit>]` MUST schedule a metadata refresh or check-update operation through a systemd transient unit.
+
+`omactl run refresh --json [--unit <unit>]` MUST return kind `omactl.operation.started` on scheduling success.
+
+Refresh scheduling success output MUST include `data.unit` as the scheduled systemd unit name.
+
+Refresh scheduling success output MUST include `data.operation` as `refresh`.
+
+Refresh scheduling success output SHOULD include `data.purpose` as `check-update` when the refresh is intended to update package metadata before an update check.
+
+Refresh operations MUST use the status, result, and logs inspection surfaces defined for omactl-owned units.
+
+`omactl status --json <refresh-unit>` MUST report refresh progress as `pending`, `running`, `succeeded`, `failed`, `cancelled`, or `unknown` using the same state vocabulary as other omactl-owned units.
+
+`omactl result --json <refresh-unit>` MUST report terminal refresh success, failure, or cancellation using the same state vocabulary as other omactl-owned units.
+
+`omactl logs --json <refresh-unit>` and `omactl logs --json --follow <refresh-unit>` MUST expose refresh logs through the same log payloads as other omactl-owned units.
+
+`omactl cancel --json <refresh-unit>` MUST be supported when `run.refresh.v1` and `unit.cancel.v1` are both advertised and the refresh unit is still cancellable.
+
+omactl MUST return scheduling failure synchronously when no refresh unit is scheduled.
+
+omactl MUST reject a refresh operation with error code `OMA_BUSY` when `/run/lock/oma.lock` exists or when omactl can otherwise determine that an oma package-changing or refresh operation is active.
+
+**Rationale:** aoska needs a cancellable checking state that is observable through the same operation lifecycle as installs, removals, and upgrades.
+"""

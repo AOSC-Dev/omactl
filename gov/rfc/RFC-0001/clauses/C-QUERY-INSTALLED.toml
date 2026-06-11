@@ -1,0 +1,46 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-QUERY-INSTALLED"
+title = "Installed Package Query"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+`omactl query installed --json` MUST NOT modify package state.
+
+`omactl query installed --json` MUST return kind `omactl.query.installed`.
+
+`omactl query installed --json` MUST return `data.packages` as an array.
+
+Each installed package object MUST include `name` as a string.
+
+Each installed package object MUST include `architecture` as a string.
+
+Each installed package object MUST include `current_version` as a string.
+
+Each installed package object MAY include `new_version` as a string when an upgrade candidate is available.
+
+Each installed package object MUST include `branches` as an array of strings.
+
+Each installed package object MUST include `status` as a stable ASCII string.
+
+Each installed package object MUST include `installed` as a boolean.
+
+Each installed package object MUST include `upgradable` as a boolean.
+
+Each installed package object MUST include `held` as a boolean.
+
+Each installed package object MUST include `automatic` as a boolean.
+
+For `omactl query installed --json`, package objects representing installed packages MUST set `installed` to `true`.
+
+`upgradable` MUST be `true` when `new_version` is present for that package.
+
+`upgradable` MUST be `false` when omactl can determine that no upgrade candidate exists for that package.
+
+When a delegated oma JSON field is unavailable, omactl MUST either derive the field from another machine-readable oma JSON field or withhold `query.installed.v1` from capability discovery.
+
+**Rationale:** aoska needs an installed inventory for update and uninstall views with stable booleans instead of display text scraped from package-manager output.
+"""

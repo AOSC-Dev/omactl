@@ -1,0 +1,40 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-SELECTED-UPGRADE"
+title = "Selected Upgrade Semantics"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+`omactl plan upgrade --json [package]...` MUST treat an empty package list as a request to plan all available upgrades.
+
+`omactl plan upgrade --json [package]...` MUST treat a non-empty package list as a request to plan upgrades for only the selected package names.
+
+`omactl plan upgrade --json <package>...` MUST return kind `omactl.plan.upgrade` when selected-upgrade planning is supported.
+
+Selected-upgrade planning output MUST identify requested package names that cannot be upgraded when that information is available from machine-readable oma output.
+
+Selected-upgrade planning output MUST NOT silently plan unrelated package upgrades except dependencies, removals, or related operations required by the package manager to complete the selected upgrade.
+
+`omactl run upgrade --json [--unit <unit>] [--yes] [package]...` MUST treat an empty package list as a request to schedule all available upgrades.
+
+`omactl run upgrade --json [--unit <unit>] [--yes] [package]...` MUST treat a non-empty package list as a request to schedule upgrades for only the selected package names.
+
+Selected-upgrade execution MUST pass selected package names to oma as argv elements.
+
+Selected-upgrade execution MUST NOT build shell command strings from selected package names.
+
+Scheduling success for selected-upgrade execution MUST return kind `omactl.operation.started`.
+
+Scheduling success for selected-upgrade execution MUST include `data.operation` as `upgrade`.
+
+Scheduling success for selected-upgrade execution SHOULD include `data.selection` as the selected package-name array when the request used a non-empty package list.
+
+omactl MUST NOT advertise `plan.upgrade.selected.v1` unless selected-upgrade planning satisfies this clause.
+
+omactl MUST NOT advertise `run.upgrade.selected.v1` unless selected-upgrade execution satisfies this clause.
+
+**Rationale:** aoska needs both "update all" and user-selected update flows, and scripts must be able to distinguish all-upgrade requests from selected-upgrade requests without relying on ambiguous option ordering.
+"""

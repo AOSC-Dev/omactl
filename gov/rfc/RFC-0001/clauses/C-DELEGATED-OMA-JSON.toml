@@ -1,0 +1,36 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-DELEGATED-OMA-JSON"
+title = "Delegated oma JSON Requirements"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+omactl MAY wrap machine-readable `oma list --json` output for `query upgradable` and `query installed`.
+
+omactl MAY wrap machine-readable `oma show --json` output for `query package-detail`.
+
+omactl MAY wrap machine-readable `oma search --json` output for `query search`.
+
+When delegated oma JSON is JSON Lines, omactl MUST parse each JSON line as machine-readable data and normalize successful output into the envelope required by this RFC.
+
+When delegated oma JSON is a single JSON document, omactl MUST parse that document as machine-readable data and normalize successful output into the envelope required by this RFC.
+
+omactl MUST validate delegated oma JSON enough to decide whether required omactl payload fields can be produced.
+
+omactl MUST return error code `MALFORMED_DELEGATE_OUTPUT` when delegated oma JSON is malformed or lacks data required for an advertised capability.
+
+omactl MUST NOT parse human-oriented oma dry-run output to satisfy `plan.*` capabilities.
+
+omactl MUST NOT parse human-oriented oma operation output to satisfy `run.*` scheduling or result payload requirements.
+
+omactl MUST NOT parse localized, colored, table-formatted, or progress-oriented oma output as a substitute for delegated JSON.
+
+omactl MAY leave plan, TUM, selected-upgrade, search, storage, or other optional capabilities unadvertised until machine-readable delegated JSON or native omactl data sources satisfy this RFC.
+
+omactl MUST report unsupported delegated oma capabilities as `UNSUPPORTED_COMMAND` or `OMA_EXEC_FAILED` rather than emitting partial success payloads.
+
+**Rationale:** The integration boundary is stable only if omactl consumes machine-readable data from oma and refuses to convert terminal presentation text into an API.
+"""

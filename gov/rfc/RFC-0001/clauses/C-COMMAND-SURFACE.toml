@@ -8,7 +8,7 @@ status = "active"
 
 [content]
 text = """
-omactl MUST expose aoska-facing package-management capabilities through `capabilities`, `query`, `plan`, `run`, `status`, `result`, and `logs` command groups.
+omactl MUST expose aoska-facing package-management capabilities through `capabilities`, `query`, `plan`, `run`, `status`, `result`, `logs`, and `cancel` command groups.
 
 `omactl capabilities --json` MUST return the supported aoska-facing capability identifiers.
 
@@ -25,5 +25,7 @@ omactl MUST expose aoska-facing package-management capabilities through `capabil
 `omactl logs --json <unit>` MUST return machine-readable accumulated logs for a unit started by omactl.
 
 `omactl logs --json --follow <unit>` MUST stream log events as JSON Lines.
+
+`omactl cancel --json <unit>` MUST request cancellation for a unit started by omactl.
 
 **Rationale:** Distinct command groups make intent testable and let aoska call the correct class of operation without knowing oma internals."""

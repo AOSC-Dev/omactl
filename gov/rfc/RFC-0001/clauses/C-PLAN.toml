@@ -10,7 +10,7 @@ status = "active"
 text = """
 `omactl plan` MUST NOT modify package state.
 
-`omactl plan upgrade --json` MUST return kind `omactl.plan.upgrade`.
+`omactl plan upgrade --json [package]...` MUST return kind `omactl.plan.upgrade`.
 
 `omactl plan install --json <package>...` MUST return kind `omactl.plan.install`.
 
