@@ -65,6 +65,10 @@ require_python(){
   command -v python3 >/dev/null 2>&1 || fail_json INTERNAL_ERROR "python3 is required for JSON output"
 }
 
+require_systemctl(){
+  command -v systemctl >/dev/null 2>&1 || fail_json SYSTEMD_FAILED "systemctl is required to retain omactl unit ownership"
+}
+
 valid_unit_syntax(){
   local unit=$1
   [[ ${#unit} -ge 1 && ${#unit} -le 80 && "$unit" =~ ^[A-Za-z0-9_.@-]+$ ]]
@@ -342,7 +346,7 @@ capabilities_json(){
     if command -v python3 >/dev/null 2>&1; then
       caps+=("query.installed.v1" "query.upgradable.v1" "query.package-detail.v1")
     fi
-    if command -v systemd-run >/dev/null 2>&1; then
+    if command -v systemd-run >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1; then
       caps+=("run.upgrade.v1" "run.install.v1" "run.remove.v1" "run.refresh.v1")
       if command -v python3 >/dev/null 2>&1; then
         caps+=("run.upgrade.selected.v1")
@@ -352,7 +356,7 @@ capabilities_json(){
   if command -v python3 >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1; then
     caps+=("unit.status.v1" "unit.result.v1" "unit.cancel.v1")
   fi
-  if command -v python3 >/dev/null 2>&1 && command -v journalctl >/dev/null 2>&1; then
+  if command -v python3 >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1 && command -v journalctl >/dev/null 2>&1; then
     caps+=("unit.logs.v1")
   fi
   local caps_json
@@ -508,6 +512,7 @@ run_json(){
       ;;
     *) fail_json UNSUPPORTED_COMMAND "unsupported run operation" "{\"operation\":$(json_escape "$operation")}";;
   esac
+  require_systemctl
   ensure_state_dir
   reject_unit_collision "$unit"
   oma_busy && fail_json OMA_BUSY "oma is busy"
