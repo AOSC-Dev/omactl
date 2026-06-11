@@ -60,6 +60,10 @@ class OmactlJsonTests(unittest.TestCase):
               echo '{{"name":"broken","current_version":"1","architecture":"amd64","status":["installed"]}}'
               exit 0
             fi
+            if [[ "${{OMA_FAKE_MODE:-}}" == "bad-new-version" ]]; then
+              echo '{{"name":"broken","branches":["stable"],"current_version":"1","architecture":"amd64","new_version":42,"status":["installed"]}}'
+              exit 0
+            fi
             if [[ "${{OMA_FAKE_MODE:-}}" == "scalar" ]]; then
               echo '"not-an-object"'
               exit 0
@@ -247,6 +251,7 @@ PY
         self.assertEqual(payload["data"]["packages"][0]["branches"], ["stable"])
         self.assertIsInstance(payload["data"]["packages"][0]["status"], str)
         self.assertEqual(payload["data"]["packages"][0]["status"], "installed")
+        self.assertNotIn("new_version", payload["data"]["packages"][0])
         self.assertEqual(
             payload["data"]["packages"][1]["status"],
             "automatic,installed,upgradable",
@@ -254,6 +259,7 @@ PY
         self.assertTrue(payload["data"]["packages"][0]["installed"])
         self.assertTrue(payload["data"]["packages"][1]["upgradable"])
         self.assertTrue(payload["data"]["packages"][1]["automatic"])
+        self.assertFalse(payload["data"]["packages"][0]["held"])
 
     def test_query_upgradable_wraps_json_lines(self):
         proc = self.run_omactl("query", "upgradable", "--json")
@@ -294,6 +300,13 @@ PY
 
     def test_query_scalar_delegate_output_returns_malformed_delegate_output(self):
         self.env["OMA_FAKE_MODE"] = "scalar"
+        proc = self.run_omactl("query", "installed", "--json")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "MALFORMED_DELEGATE_OUTPUT")
+
+    def test_query_invalid_new_version_returns_malformed_delegate_output(self):
+        self.env["OMA_FAKE_MODE"] = "bad-new-version"
         proc = self.run_omactl("query", "installed", "--json")
         self.assertNotEqual(proc.returncode, 0)
         payload = self.load_json(proc)

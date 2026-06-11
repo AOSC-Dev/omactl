@@ -225,17 +225,25 @@ for item in items:
             status_values.add("upgradable")
         if item.get("installed") is True:
             status_values.add("installed")
+        if item.get("held") is True:
+            status_values.add("held")
+        if item.get("automatic") is True:
+            status_values.add("automatic")
         item["status"] = ",".join(sorted(status_values))
+        if item.get("new_version") is None:
+            item.pop("new_version", None)
+        elif not isinstance(item.get("new_version"), str):
+            raise ValueError("invalid new_version for {}".format(item.get("name", "<unknown>")))
         if kind == "omactl.query.installed":
             item["installed"] = True
         else:
-            item.setdefault("installed", "installed" in status_values)
+            item["installed"] = "installed" in status_values
         if kind == "omactl.query.upgradable":
             item["upgradable"] = True
         else:
-            item.setdefault("upgradable", "upgradable" in status_values)
-        item.setdefault("held", "held" in status_values)
-        item.setdefault("automatic", "automatic" in status_values)
+            item["upgradable"] = "upgradable" in status_values
+        item["held"] = "held" in status_values
+        item["automatic"] = "automatic" in status_values
         missing = [field for field in required if field not in item or item.get(field) is None]
         if missing:
             raise ValueError("missing required fields for {}: {}".format(item.get("name", "<unknown>"), ",".join(missing)))
