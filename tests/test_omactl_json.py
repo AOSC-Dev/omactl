@@ -23,11 +23,16 @@ class OmactlJsonTests(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.calls = self.root / "calls.log"
+        self.systemd_args = self.root / "systemd.args"
         self.env = os.environ.copy()
         self.env["PATH"] = f"{self.bin}:{self.env.get('PATH', '')}"
         self.env["OMA_BIN"] = str(self.bin / "oma")
         self.env["OMACTL_UNIT_SEED"] = "test"
         self.env["OMACTL_DISABLE_BUSY_CHECK"] = "1"
+        self.env["OMACTL_STATE_DIR"] = str(self.root / "state")
+        owned = self.root / "state" / "units"
+        owned.mkdir(parents=True)
+        (owned / "oma-task-test.service").write_text("operation=install\n", encoding="utf-8")
         self._write_fakes()
 
     def tearDown(self) -> None:
@@ -40,6 +45,18 @@ class OmactlJsonTests(unittest.TestCase):
             #!/usr/bin/env bash
             set -euo pipefail
             echo "oma:$*" >> {self.calls!s}
+            if [[ "${{OMA_FAKE_MODE:-}}" == "bad-json" ]]; then
+              echo '{{'
+              exit 0
+            fi
+            if [[ "${{OMA_FAKE_MODE:-}}" == "missing-field" ]]; then
+              echo '{{"name":"broken"}}'
+              exit 0
+            fi
+            if [[ "${{OMA_FAKE_MODE:-}}" == "nonzero" ]]; then
+              echo 'delegated failure' >&2
+              exit 42
+            fi
             if [[ "${{1:-}}" == "--version" ]]; then
               echo "oma 1.25.0"
               exit 0
@@ -73,6 +90,11 @@ class OmactlJsonTests(unittest.TestCase):
             #!/usr/bin/env bash
             set -euo pipefail
             echo "systemd-run:$*" >> {self.calls!s}
+            python3 - "$@" > {self.systemd_args!s} <<'PY'
+import json
+import sys
+print(json.dumps(sys.argv[1:]))
+PY
             exit 0
             """,
         )
@@ -137,6 +159,15 @@ class OmactlJsonTests(unittest.TestCase):
         self.assertEqual(payload["kind"], "omactl.capabilities")
         self.assertIn("query.installed.v1", payload["data"]["capabilities"])
         self.assertNotIn("plan.upgrade.v1", payload["data"]["capabilities"])
+        self.assertNotIn("run.upgrade.selected.v1", payload["data"]["capabilities"])
+
+    def test_capabilities_do_not_advertise_oma_backed_queries_when_oma_missing(self):
+        self.env["OMA_BIN"] = str(self.bin / "missing-oma")
+        proc = self.run_omactl("capabilities", "--json")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = self.load_json(proc)
+        self.assertNotIn("query.installed.v1", payload["data"]["capabilities"])
+        self.assertNotIn("run.install.v1", payload["data"]["capabilities"])
 
     def test_query_installed_wraps_json_lines(self):
         proc = self.run_omactl("query", "installed", "--json")
@@ -163,6 +194,28 @@ class OmactlJsonTests(unittest.TestCase):
         self.assertEqual(payload["kind"], "omactl.query.package-detail")
         self.assertEqual([p["name"] for p in payload["data"]["packages"]], ["nano", "htop"])
 
+    def test_query_malformed_delegate_output_returns_single_error_envelope(self):
+        self.env["OMA_FAKE_MODE"] = "bad-json"
+        proc = self.run_omactl("query", "installed", "--json")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["code"], "MALFORMED_DELEGATE_OUTPUT")
+
+    def test_query_missing_required_field_returns_malformed_delegate_output(self):
+        self.env["OMA_FAKE_MODE"] = "missing-field"
+        proc = self.run_omactl("query", "upgradable", "--json")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "MALFORMED_DELEGATE_OUTPUT")
+
+    def test_query_nonzero_delegate_returns_oma_exec_failed(self):
+        self.env["OMA_FAKE_MODE"] = "nonzero"
+        proc = self.run_omactl("query", "installed", "--json")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "OMA_EXEC_FAILED")
+
     def test_run_install_rejects_empty_package_list(self):
         proc = self.run_omactl("run", "install", "--json")
         self.assertNotEqual(proc.returncode, 0)
@@ -171,21 +224,66 @@ class OmactlJsonTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "INVALID_ARGUMENTS")
 
     def test_run_install_schedules_systemd_unit_with_structured_argv(self):
-        proc = self.run_omactl("run", "install", "--json", "--unit", "oma-task-test.service", "--yes", "nano")
+        hostile_pkg = "nano;touch /tmp/pwned"
+        proc = self.run_omactl("run", "install", "--json", "--unit", "oma-task-new.service", "--yes", hostile_pkg)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         payload = self.load_json(proc)
         self.assertEqual(payload["kind"], "omactl.operation.started")
-        self.assertEqual(payload["data"]["unit"], "oma-task-test.service")
+        self.assertEqual(payload["data"]["unit"], "oma-task-new.service")
         self.assertEqual(payload["data"]["operation"], "install")
-        calls = self.calls.read_text(encoding="utf-8")
-        self.assertIn("systemd-run:", calls)
-        self.assertIn("oma install --yes nano", calls)
+        argv = json.loads(self.systemd_args.read_text(encoding="utf-8"))
+        self.assertEqual(argv[-4:], [self.env["OMA_BIN"], "install", "--yes", hostile_pkg])
+
+    def test_run_rejects_retained_unit_collision(self):
+        proc = self.run_omactl("run", "install", "--json", "--unit", "oma-task-test.service", "nano")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "INVALID_ARGUMENTS")
+
+    def test_legacy_run_still_accepts_oma_args_without_json_mode(self):
+        proc = self.run_omactl("run", "install", "--yes", "nano")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("unit=oma-task-test.service", proc.stdout)
 
     def test_run_refresh_requires_valid_purpose(self):
         proc = self.run_omactl("run", "refresh", "--json", "--unit", "oma-task-test.service")
         self.assertNotEqual(proc.returncode, 0)
         payload = self.load_json(proc)
         self.assertEqual(payload["error"]["code"], "INVALID_ARGUMENTS")
+
+    def test_run_refresh_schedules_with_explicit_purpose(self):
+        proc = self.run_omactl(
+            "run",
+            "refresh",
+            "--json",
+            "--unit",
+            "oma-task-refresh.service",
+            "--purpose",
+            "check-updates",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["kind"], "omactl.operation.started")
+        self.assertEqual(payload["data"]["operation"], "refresh")
+        self.assertEqual(payload["data"]["purpose"], "check-updates")
+
+    def test_run_remove_schedules_package_operation(self):
+        proc = self.run_omactl("run", "remove", "--json", "--unit", "oma-task-remove.service", "--yes", "nano")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["data"]["operation"], "remove")
+
+    def test_run_upgrade_schedules_all_upgrade(self):
+        proc = self.run_omactl("run", "upgrade", "--json", "--unit", "oma-task-upgrade.service", "--yes")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["data"]["operation"], "upgrade")
+
+    def test_plan_group_returns_structured_unsupported_command(self):
+        proc = self.run_omactl("plan", "upgrade", "--json")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "UNSUPPORTED_COMMAND")
 
     def test_status_json_maps_systemd_state(self):
         proc = self.run_omactl("status", "--json", "oma-task-test.service")
@@ -194,6 +292,19 @@ class OmactlJsonTests(unittest.TestCase):
         self.assertEqual(payload["kind"], "omactl.unit.status")
         self.assertEqual(payload["data"]["state"], "running")
         self.assertEqual(payload["data"]["systemd"]["ActiveState"], "active")
+
+    def test_result_json_maps_systemd_state(self):
+        proc = self.run_omactl("result", "--json", "oma-task-test.service")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["kind"], "omactl.unit.result")
+        self.assertEqual(payload["data"]["state"], "running")
+
+    def test_status_json_rejects_unknown_oma_task_unit(self):
+        proc = self.run_omactl("status", "--json", "oma-task-unknown.service")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "UNKNOWN_UNIT")
 
     def test_logs_json_returns_lines(self):
         proc = self.run_omactl("logs", "--json", "oma-task-test.service")
@@ -212,6 +323,12 @@ class OmactlJsonTests(unittest.TestCase):
 
     def test_invalid_unit_name_returns_invalid_arguments(self):
         proc = self.run_omactl("status", "--json", "../../bad")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "INVALID_ARGUMENTS")
+
+    def test_missing_unit_returns_invalid_arguments(self):
+        proc = self.run_omactl("status", "--json")
         self.assertNotEqual(proc.returncode, 0)
         payload = self.load_json(proc)
         self.assertEqual(payload["error"]["code"], "INVALID_ARGUMENTS")
