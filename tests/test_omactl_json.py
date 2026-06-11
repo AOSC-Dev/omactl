@@ -326,6 +326,16 @@ PY
         self.assertFalse(payload["ok"])
         self.assertEqual(payload["error"]["code"], "INVALID_ARGUMENTS")
 
+    def test_invalid_run_request_does_not_create_state_or_schedule_unit(self):
+        isolated_state = self.root / "empty-state"
+        self.env["OMACTL_STATE_DIR"] = str(isolated_state)
+        proc = self.run_omactl("run", "install", "--json", "--unit", "oma-task-noop.service")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "INVALID_ARGUMENTS")
+        self.assertFalse(isolated_state.exists())
+        self.assertFalse(self.systemd_args.exists())
+
     def test_run_install_schedules_systemd_unit_with_structured_argv(self):
         hostile_pkg = "nano;touch /tmp/pwned"
         proc = self.run_omactl("run", "install", "--json", "--unit", "oma-task-new.service", "--yes", hostile_pkg)
