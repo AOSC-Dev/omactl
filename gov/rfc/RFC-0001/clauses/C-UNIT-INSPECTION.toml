@@ -1,0 +1,51 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-UNIT-INSPECTION"
+title = "Unit Inspection"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+omactl MUST provide machine-readable status for units it starts.
+
+omactl MUST provide machine-readable result information for units it starts.
+
+omactl MUST provide log retrieval for units it starts.
+
+`omactl status --json <unit>` MUST return kind `omactl.unit.status` for an inspectable unit started by omactl.
+
+`omactl result --json <unit>` MUST return kind `omactl.unit.result` for an inspectable unit started by omactl.
+
+`omactl logs --json <unit>` MUST return kind `omactl.unit.logs` for an inspectable unit started by omactl.
+
+`omactl logs --json --follow <unit>` MUST stream JSON Lines where each line is a JSON envelope.
+
+Each successful follow-mode log event MUST use kind `omactl.unit.log-line`.
+
+Unit status and result payloads MUST include `data.unit` as the unit name.
+
+Unit status and result payloads MUST include `data.state` as one of `pending`, `running`, `succeeded`, `failed`, `cancelled`, or `unknown`.
+
+Unit status and result payloads SHOULD include `data.systemd.ActiveState`, `data.systemd.SubState`, `data.systemd.Result`, and `data.systemd.ExecMainStatus` when those values are available from systemd.
+
+Accumulated log payloads MUST include `data.unit` as the unit name.
+
+Accumulated log payloads MUST include `data.lines` as an array of strings.
+
+Each follow-mode log-line payload MUST include `data.unit` as the unit name.
+
+Each follow-mode log-line payload MUST include `data.line` as a string.
+
+`omactl logs --json --follow <unit>` MUST close stdout and exit with status `0` after the unit reaches a terminal state and available log output has been emitted.
+
+If follow-mode log setup fails before streaming begins, omactl MUST emit one JSON error envelope and exit with a non-zero status.
+
+If follow-mode log streaming fails after one or more log-line envelopes have been emitted, omactl MUST emit a final JSON error envelope with kind `omactl.unit.log-error` when stdout remains writable and exit with a non-zero status.
+
+omactl MUST return error code `UNKNOWN_UNIT` when the requested unit was not started by omactl.
+
+omactl MUST return error code `UNKNOWN_UNIT` for non-omactl systemd units even when systemd could otherwise inspect those units.
+
+**Rationale:** aoska needs deterministic operation state transitions without parsing human-oriented `systemctl` or `journalctl` output, and omactl should not become a generic systemd inspection API by accident."""

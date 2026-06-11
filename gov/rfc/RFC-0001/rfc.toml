@@ -1,0 +1,35 @@
+#:schema ../../schema/rfc.schema.json
+
+[govctl]
+id = "RFC-0001"
+title = "aoska-facing omactl CLI and JSON contract"
+version = "0.1.0"
+status = "draft"
+phase = "spec"
+owners = ["@wxiwnd"]
+created = "2026-06-11"
+
+[[sections]]
+title = "Summary"
+clauses = ["clauses/C-SUMMARY.toml"]
+
+[[sections]]
+title = "Specification"
+clauses = [
+    "clauses/C-OWNERSHIP.toml",
+    "clauses/C-COMMAND-SURFACE.toml",
+    "clauses/C-JSON-ENVELOPE.toml",
+    "clauses/C-QUERY.toml",
+    "clauses/C-PLAN.toml",
+    "clauses/C-RUN.toml",
+    "clauses/C-UNIT-INSPECTION.toml",
+    "clauses/C-ERRORS.toml",
+    "clauses/C-COMPATIBILITY.toml",
+    "clauses/C-SECURITY.toml",
+    "clauses/C-CAPABILITIES.toml",
+]
+
+[[changelog]]
+version = "0.1.0"
+date = "2026-06-11"
+notes = "Initial draft"

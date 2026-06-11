@@ -1,0 +1,41 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-RUN"
+title = "Operation Execution"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+`omactl run upgrade --json [--unit <unit>] [--yes] [-- <oma-args>...]` MUST schedule an upgrade operation through a systemd transient unit.
+
+`omactl run install --json [--unit <unit>] [--yes] <package>...` MUST schedule an install operation through a systemd transient unit.
+
+`omactl run install --json` MUST reject an empty package list with error code `INVALID_ARGUMENTS`.
+
+`omactl run remove --json [--unit <unit>] [--yes] <package>...` MUST schedule a remove operation through a systemd transient unit.
+
+`omactl run remove --json` MUST reject an empty package list with error code `INVALID_ARGUMENTS`.
+
+`omactl run` MUST execute the system-installed oma binary or an explicitly configured oma binary path.
+
+`omactl run` MUST pass package names, paths, and flags to oma as argv elements.
+
+`omactl run` MUST NOT build shell command strings from caller-provided package names, paths, or flags.
+
+`omactl run` MUST reject a caller-provided unit name that collides with an existing systemd unit or an omactl-retained unit with error code `INVALID_ARGUMENTS`.
+
+`omactl run` MUST return kind `omactl.operation.started` on scheduling success.
+
+Scheduling success output MUST include `data.unit` as the scheduled systemd unit name.
+
+Scheduling success output MUST include `data.operation` as one of `upgrade`, `install`, or `remove`.
+
+`omactl run` MUST return scheduling failure synchronously when no unit is scheduled.
+
+`omactl run` MUST reject a package-changing operation with error code `OMA_BUSY` when `/run/lock/oma.lock` exists or when omactl can otherwise determine that an oma package-changing operation is active.
+
+`omactl run` MAY support concurrent package-changing operations only after advertising a future capability that explicitly permits concurrency.
+
+**Rationale:** Package-changing operations need privilege, lifetime, cancellation, and logging boundaries that belong outside the GUI process."""

@@ -1,0 +1,29 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-CAPABILITIES"
+title = "Capability Discovery"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+`omactl capabilities --json` MUST return a JSON envelope with kind `omactl.capabilities`.
+
+The `data` object for `omactl.capabilities` MUST include `omactl_version` as a string.
+
+The `data` object for `omactl.capabilities` MUST include `oma_path` as a string when an oma binary can be resolved.
+
+The `data` object for `omactl.capabilities` MUST include `oma_version` as a string when the resolved oma binary can report a version.
+
+The `data` object for `omactl.capabilities` MUST include `capabilities` as an array of stable ASCII strings.
+
+The initial aoska-facing capability identifiers MUST include `query.upgradable.v1`, `query.package-detail.v1`, `plan.upgrade.v1`, `plan.install.v1`, `plan.remove.v1`, `run.upgrade.v1`, `run.install.v1`, `run.remove.v1`, `unit.status.v1`, `unit.result.v1`, and `unit.logs.v1` when the corresponding command is supported.
+
+The capability identifier `query.search.v1` MAY be advertised when live package search is supported.
+
+The capability identifier `plan.tum.v1` MUST be advertised when planning output can include TUM matching and security-update classification.
+
+omactl MUST NOT advertise a capability identifier unless the command and payload requirements for that capability are satisfied.
+
+**Rationale:** Capability discovery gives aoska a programmatic compatibility gate without hard-coding omactl or oma version numbers."""

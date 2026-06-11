@@ -1,0 +1,19 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-OWNERSHIP"
+title = "Ownership Boundaries"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+oma MUST own package-management semantics, including dependency resolution, operation planning, TUM matching, security-update classification, and package metadata derived from APT state.
+
+omactl MUST own process mediation, systemd transient unit creation, unit naming, unit status retrieval, unit logs, unit results, and the aoska-facing JSON envelope.
+
+omactl MUST NOT reimplement dependency resolution or package-management semantics that belong to oma.
+
+omactl MAY delegate query, planning, and operation semantics to the system-installed oma binary or to an explicitly configured oma binary path.
+
+**Rationale:** The API boundary keeps omactl small and lets aoska depend on one process-level contract instead of embedding package-manager crates."""

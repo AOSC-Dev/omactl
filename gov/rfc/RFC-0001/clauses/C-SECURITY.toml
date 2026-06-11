@@ -1,0 +1,27 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-SECURITY"
+title = "Security and Argument Handling"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+omactl MUST invoke oma without shell interpolation for caller-provided arguments.
+
+omactl MUST validate that `query` and `plan` requests are read-only.
+
+Caller-provided unit names MUST be accepted only when they match `^[A-Za-z0-9_.@-]{1,80}$`.
+
+omactl MUST reject invalid caller-provided unit names with error code `INVALID_ARGUMENTS`.
+
+omactl MUST NOT normalize an invalid caller-provided unit name into a different valid name.
+
+omactl MUST reject caller-provided unit names that collide with an existing systemd unit or an omactl-retained unit.
+
+omactl MUST use error code `INVALID_ARGUMENTS` for caller-provided unit-name collisions.
+
+omactl MUST treat package names and paths as structured argv values, not as shell fragments.
+
+**Rationale:** aoska passes user-influenced package identifiers and operation identifiers to omactl, so the process boundary must not become a command-injection surface or a generic systemd control surface."""

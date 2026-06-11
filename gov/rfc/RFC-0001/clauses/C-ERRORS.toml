@@ -1,0 +1,53 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-ERRORS"
+title = "Errors and Exit Status"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+Machine-readable errors MUST include a stable error code.
+
+Machine-readable errors MUST include a human-readable message.
+
+omactl MUST use error code `INVALID_ARGUMENTS` for syntactically invalid commands, missing required arguments, empty package lists, invalid unit names, or caller-provided unit-name collisions.
+
+omactl MUST use error code `UNSUPPORTED_COMMAND` for valid omactl syntax that requests an unsupported aoska-facing capability.
+
+omactl MUST use error code `OMA_BUSY` when a package-changing operation is rejected because another oma operation is active.
+
+omactl MUST use error code `AUTHORIZATION_FAILED` when permission or privilege acquisition fails.
+
+omactl MUST use error code `SYSTEMD_FAILED` when systemd cannot schedule, inspect, stop, or report a required omactl-owned unit.
+
+omactl MUST use error code `OMA_EXEC_FAILED` when the delegated oma command cannot be executed or exits in a way that prevents omactl from producing the required success payload.
+
+omactl MUST use error code `TUM_UNAVAILABLE` when TUM data is required for a requested capability but cannot be obtained.
+
+omactl MUST use error code `UNKNOWN_UNIT` when a requested unit was not started by omactl or is no longer retained by omactl.
+
+omactl MUST use error code `MALFORMED_DELEGATE_OUTPUT` when delegated oma JSON is required but cannot be parsed or validated.
+
+omactl MUST use error code `INTERNAL_ERROR` for unexpected failures not covered by a more specific code.
+
+Error details for `OMA_BUSY` SHOULD include `unit` when the active unit is known.
+
+Error details for `SYSTEMD_FAILED` SHOULD include `unit` and `systemd_message` when available.
+
+Error details for `OMA_EXEC_FAILED` SHOULD include `exit_status` when available.
+
+Error details for `INVALID_ARGUMENTS` SHOULD include `argument` when one argument caused the failure.
+
+Read-only query and planning commands MUST exit with status `0` only when the JSON response represents a successful query or plan.
+
+Read-only query and planning commands MUST exit with a non-zero status when they cannot produce a successful JSON response.
+
+Operation-start commands MUST exit with status `0` when the operation was successfully scheduled.
+
+Operation-start commands MUST exit with a non-zero status when the operation was not scheduled.
+
+If an operation-start command supports wait mode, wait-mode output MUST distinguish scheduling failure from unit execution failure.
+
+**Rationale:** aoska needs error handling that can drive UI state and diagnostics without guessing from text output."""

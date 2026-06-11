@@ -1,0 +1,45 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-JSON-ENVELOPE"
+title = "JSON Envelope"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+All aoska-facing successful outputs MUST be available as a single JSON document unless the command explicitly documents JSON Lines.
+
+All aoska-facing JSON documents MUST include `schema_version`, `ok`, and `kind` fields.
+
+`schema_version` MUST be the integer `1` for this version of the contract.
+
+Successful JSON documents MUST set `ok` to `true` and place command-specific payload under `data` unless the command documents a more specific payload location.
+
+Failed JSON documents MUST set `ok` to `false` and include an `error` object.
+
+The `error` object MUST include `code` as a stable ASCII string.
+
+The `error` object MUST include `message` as a human-readable string.
+
+The `error` object MAY include `details` as an object.
+
+Machine-readable field names, error codes, and enum-like values MUST be stable ASCII strings.
+
+JSON output MUST NOT contain terminal color escape sequences.
+
+JSON output MUST NOT use localized field names.
+
+Producers MAY add fields within a schema version.
+
+Producers MUST NOT remove fields within a schema version.
+
+Producers MUST NOT rename fields within a schema version.
+
+Producers MUST NOT change field semantics within a schema version.
+
+Consumers MUST ignore unknown fields.
+
+Breaking JSON changes MUST increment `schema_version`.
+
+**Rationale:** aoska needs one parse path across omactl and oma-backed operations, and independently released components need forward-compatible JSON."""
