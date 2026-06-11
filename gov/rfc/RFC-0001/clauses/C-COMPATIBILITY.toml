@@ -1,0 +1,21 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-COMPATIBILITY"
+title = "Compatibility"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+Existing human-oriented omactl commands that do not pass `--json` SHOULD remain compatible for terminal users.
+
+New machine-readable output MUST be exposed through explicit `--json` flags or explicit aoska-facing subcommands.
+
+Existing oma `--json` output MAY be reused behind omactl if omactl wraps or validates it to satisfy this RFC.
+
+omactl MUST document the minimum oma capability required for each aoska-facing command that delegates to oma.
+
+omactl MUST report unsupported delegated oma capabilities as `UNSUPPORTED_COMMAND` or `OMA_EXEC_FAILED` rather than emitting partial success payloads.
+
+**Rationale:** The GUI contract should not break existing command-line workflows, and aoska needs clear version diagnostics."""

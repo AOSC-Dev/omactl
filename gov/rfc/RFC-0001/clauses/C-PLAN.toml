@@ -1,0 +1,61 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-PLAN"
+title = "Planning Operations"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+`omactl plan` MUST NOT modify package state.
+
+`omactl plan upgrade --json` MUST return kind `omactl.plan.upgrade`.
+
+`omactl plan install --json <package>...` MUST return kind `omactl.plan.install`.
+
+`omactl plan install --json <package>...` MUST reject an empty package list with error code `INVALID_ARGUMENTS`.
+
+`omactl plan remove --json <package>...` MUST return kind `omactl.plan.remove`.
+
+`omactl plan remove --json <package>...` MUST reject an empty package list with error code `INVALID_ARGUMENTS`.
+
+Planning output MUST include `data.operation.install` as an array.
+
+Planning output MUST include `data.operation.remove` as an array.
+
+Planning output MUST include `data.operation.total_download_size` as an integer number of bytes.
+
+Planning output MUST include `data.operation.disk_size_delta` as an integer number of bytes.
+
+Planning output MUST include `data.operation.recommend` as an array when recommended packages are reported by oma.
+
+Planning output MUST include `data.operation.suggest` as an array when suggested packages are reported by oma.
+
+Each install entry MUST include `name`, `architecture`, and `new_version` as strings.
+
+Each install entry SHOULD include `old_version`, `download_size`, and `operation` when those values are reported by oma.
+
+Each remove entry MUST include `name` and `architecture` as strings.
+
+Each remove entry SHOULD include `version` and `reason` when those values are reported by oma.
+
+Planning output MUST include `data.held_packages` as an array when held-package information is available.
+
+When `plan.tum.v1` is advertised, planning output MUST include `data.tum.available` as a boolean.
+
+When `data.tum.available` is `true`, planning output MUST include `data.tum.matches` as an array.
+
+Each TUM match MUST include `manifest_name` as a string.
+
+Each TUM match MUST include `is_security` as a boolean.
+
+Each TUM match MUST include `package_names` as an array of strings.
+
+Each TUM match SHOULD include `name` and `caution` localized maps when those values are available.
+
+Localized TUM maps MUST be JSON objects whose keys are locale identifiers and whose values are strings.
+
+When TUM data is unavailable, planning output MUST set `data.tum.available` to `false` and SHOULD include `data.tum.reason` as a stable ASCII string.
+
+**Rationale:** aoska needs operation previews and security-update grouping without linking to oma crates or reimplementing planning logic."""

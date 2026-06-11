@@ -1,0 +1,29 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-COMMAND-SURFACE"
+title = "Command Surface"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+omactl MUST expose aoska-facing package-management capabilities through `capabilities`, `query`, `plan`, `run`, `status`, `result`, and `logs` command groups.
+
+`omactl capabilities --json` MUST return the supported aoska-facing capability identifiers.
+
+`omactl query <topic> --json [args...]` MUST be reserved for read-only package state retrieval.
+
+`omactl plan <operation> --json [args...]` MUST be reserved for read-only computation of package operations that would be performed.
+
+`omactl run <operation> --json [args...]` MUST be reserved for scheduling package-changing operations.
+
+`omactl status --json <unit>` MUST return machine-readable status for a unit started by omactl.
+
+`omactl result --json <unit>` MUST return machine-readable terminal or current result information for a unit started by omactl.
+
+`omactl logs --json <unit>` MUST return machine-readable accumulated logs for a unit started by omactl.
+
+`omactl logs --json --follow <unit>` MUST stream log events as JSON Lines.
+
+**Rationale:** Distinct command groups make intent testable and let aoska call the correct class of operation without knowing oma internals."""

@@ -1,0 +1,49 @@
+#:schema ../../../schema/clause.schema.json
+
+[govctl]
+id = "C-QUERY"
+title = "Read-only Query Operations"
+kind = "normative"
+status = "active"
+
+[content]
+text = """
+`omactl query` MUST NOT modify package state.
+
+`omactl query` MUST reject requested actions that are not read-only.
+
+`omactl query upgradable --json` MUST return kind `omactl.query.upgradable`.
+
+`omactl query upgradable --json` MUST return `data.packages` as an array.
+
+Each upgradable package object MUST include `name`, `architecture`, `current_version`, and `new_version` as strings.
+
+Each upgradable package object MUST include `held` as a boolean when held-package state is available.
+
+`omactl query package-detail --json <package>...` MUST return kind `omactl.query.package-detail`.
+
+`omactl query package-detail --json <package>...` MUST reject an empty package list with error code `INVALID_ARGUMENTS`.
+
+`omactl query package-detail --json <package>...` MUST return `data.packages` as an array.
+
+Each package detail object MUST include `name` as a string.
+
+Each package detail object SHOULD include `version`, `architecture`, `summary`, and `description` as strings when those values are available from oma.
+
+Each package detail object SHOULD include `installed` and `upgradable` as booleans when those values are available from oma.
+
+`omactl query search --json <term>...` MAY return kind `omactl.query.search` when `query.search.v1` is advertised.
+
+`omactl query search --json <term>...` MUST reject an empty search term list with error code `INVALID_ARGUMENTS` when search is supported.
+
+`omactl query search --json <term>...` MUST return `data.results` as an array when search is supported.
+
+Each search result object MUST include `name` as a string.
+
+Each search result object SHOULD include `version`, `architecture`, and `summary` as strings when those values are available from oma.
+
+Each search result object SHOULD include `installed` and `exact_match` as booleans when those values are available from oma.
+
+`omactl query` SHOULD execute without creating a systemd transient unit unless system policy requires a mediated execution context.
+
+**Rationale:** aoska renders package and update state frequently, so read paths must be safe, cheap, explicit, and schema-testable."""
