@@ -65,8 +65,20 @@ require_python(){
   command -v python3 >/dev/null 2>&1 || fail_json INTERNAL_ERROR "python3 is required for JSON output"
 }
 
+systemctl_available(){
+  command -v systemctl >/dev/null 2>&1 && systemctl --version >/dev/null 2>&1
+}
+
+systemd_run_available(){
+  command -v systemd-run >/dev/null 2>&1 && systemd-run --version >/dev/null 2>&1
+}
+
 require_systemctl(){
-  command -v systemctl >/dev/null 2>&1 || fail_json SYSTEMD_FAILED "systemctl is required to retain omactl unit ownership"
+  systemctl_available || fail_json SYSTEMD_FAILED "systemctl is required to retain omactl unit ownership"
+}
+
+require_systemd_run(){
+  systemd_run_available || fail_json SYSTEMD_FAILED "systemd-run is required to schedule omactl units"
 }
 
 valid_unit_syntax(){
@@ -342,21 +354,22 @@ capabilities_json(){
   local caps=()
   if command -v "$OMA_BIN" >/dev/null 2>&1 || [[ -x "$OMA_BIN" ]]; then
     oma_path=$(command -v "$OMA_BIN" 2>/dev/null || printf '%s' "$OMA_BIN")
-    oma_version=$("$OMA_BIN" --version 2>/dev/null | head -n1 || true)
+    oma_version=$("$OMA_BIN" --version 2>/dev/null || true)
+    oma_version=${oma_version%%$'\n'*}
     if command -v python3 >/dev/null 2>&1; then
       caps+=("query.installed.v1" "query.upgradable.v1" "query.package-detail.v1")
     fi
-    if command -v systemd-run >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1; then
+    if systemd_run_available && systemctl_available; then
       caps+=("run.upgrade.v1" "run.install.v1" "run.remove.v1" "run.refresh.v1")
       if command -v python3 >/dev/null 2>&1; then
         caps+=("run.upgrade.selected.v1")
       fi
     fi
   fi
-  if command -v python3 >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1; then
+  if command -v python3 >/dev/null 2>&1 && systemctl_available; then
     caps+=("unit.status.v1" "unit.result.v1" "unit.cancel.v1")
   fi
-  if command -v python3 >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1 && command -v journalctl >/dev/null 2>&1; then
+  if command -v python3 >/dev/null 2>&1 && systemctl_available && command -v journalctl >/dev/null 2>&1; then
     caps+=("unit.logs.v1")
   fi
   local caps_json
@@ -512,6 +525,7 @@ run_json(){
       ;;
     *) fail_json UNSUPPORTED_COMMAND "unsupported run operation" "{\"operation\":$(json_escape "$operation")}";;
   esac
+  require_systemd_run
   require_systemctl
   ensure_state_dir
   reject_unit_collision "$unit"
