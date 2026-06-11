@@ -39,14 +39,14 @@ omactl delegates package facts to oma. The current JSON API advertises only the
 capabilities that can be implemented from these delegated oma JSON commands:
 
 - `oma list --installed --json` with at least `name`, `architecture`, and
-  `current_version`.
+  `current_version`, and `branches`.
 - `oma list --upgradable --json` with at least `name`, `architecture`,
   `current_version`, and `new_version`.
 - `oma show --json <package>...` with at least `name`.
-- `oma search --json <term>...` with at least `name`.
 
-Planning/TUM APIs are intentionally not advertised yet. Until oma exposes a
-machine-readable transaction plan, `omactl plan ... --json` returns an
+Search, planning, selected-upgrade capability discovery, and TUM APIs are
+intentionally not advertised yet. Until oma exposes the required
+machine-readable data, `omactl plan ... --json` returns an
 `UNSUPPORTED_COMMAND` error envelope instead of scraping human output.
 
 ## Run human-oriented tasks
@@ -74,7 +74,9 @@ Wait and follow logs, blocking the caller:
 omactl uses `systemd-run` to establish a systemd transient unit. The default
 unit name is `oma-task-<timestamp>-<rand>.service`. You can modify it by passing
 `--unit=<name>` in the legacy human command form or `--unit <name>` in the JSON
-operation form.
+operation form. JSON-mode inspection, logs, and cancellation are limited to
+units retained in the omactl state directory and whose current systemd
+`InvocationID` still matches the retained record.
 
 ## Requirements
 

@@ -12,7 +12,7 @@ OMACTL = REPO / "src" / "omactl"
 
 
 def write_exe(path: Path, body: str) -> None:
-    path.write_text(textwrap.dedent(body), encoding="utf-8")
+    path.write_text(textwrap.dedent(body).lstrip(), encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
@@ -32,7 +32,10 @@ class OmactlJsonTests(unittest.TestCase):
         self.env["OMACTL_STATE_DIR"] = str(self.root / "state")
         owned = self.root / "state" / "units"
         owned.mkdir(parents=True)
-        (owned / "oma-task-test.service").write_text("operation=install\n", encoding="utf-8")
+        (owned / "oma-task-test.service").write_text(
+            "unit=oma-task-test.service\noperation=install\ninvocation_id=invocation-oma-task-test.service\n",
+            encoding="utf-8",
+        )
         self._write_fakes()
 
     def tearDown(self) -> None:
@@ -51,6 +54,14 @@ class OmactlJsonTests(unittest.TestCase):
             fi
             if [[ "${{OMA_FAKE_MODE:-}}" == "missing-field" ]]; then
               echo '{{"name":"broken"}}'
+              exit 0
+            fi
+            if [[ "${{OMA_FAKE_MODE:-}}" == "missing-branches" ]]; then
+              echo '{{"name":"broken","current_version":"1","architecture":"amd64","status":["installed"]}}'
+              exit 0
+            fi
+            if [[ "${{OMA_FAKE_MODE:-}}" == "scalar" ]]; then
+              echo '"not-an-object"'
               exit 0
             fi
             if [[ "${{OMA_FAKE_MODE:-}}" == "nonzero" ]]; then
@@ -105,11 +116,58 @@ PY
             set -euo pipefail
             echo "systemctl:$*" >> {self.calls!s}
             if [[ "${{1:-}}" == "show" ]]; then
-              echo 'Id=oma-task-test.service'
-              echo 'ActiveState=active'
-              echo 'SubState=running'
-              echo 'Result=success'
-              echo 'ExecMainStatus=0'
+              unit="${{2:-}}"
+              echo "Id=$unit"
+              case "${{SYSTEMD_FAKE_MODE:-}}" in
+                mismatch)
+                  echo 'LoadState=loaded'
+                  echo "InvocationID=foreign-$unit"
+                  echo 'ActiveState=active'
+                  echo 'SubState=running'
+                  echo 'Result=success'
+                  echo 'ExecMainStatus=0'
+                  ;;
+                not-found)
+                  echo 'LoadState=not-found'
+                  echo "InvocationID=invocation-$unit"
+                  echo 'ActiveState=inactive'
+                  echo 'SubState=dead'
+                  echo 'Result='
+                  echo 'ExecMainStatus=0'
+                  ;;
+                terminal)
+                  echo 'LoadState=loaded'
+                  echo "InvocationID=invocation-$unit"
+                  echo 'ActiveState=inactive'
+                  echo 'SubState=dead'
+                  echo 'Result=success'
+                  echo 'ExecMainStatus=0'
+                  ;;
+                failed)
+                  echo 'LoadState=loaded'
+                  echo "InvocationID=invocation-$unit"
+                  echo 'ActiveState=failed'
+                  echo 'SubState=failed'
+                  echo 'Result=exit-code'
+                  echo 'ExecMainStatus=1'
+                  ;;
+                unknown)
+                  echo 'LoadState=loaded'
+                  echo "InvocationID=invocation-$unit"
+                  echo 'ActiveState=inactive'
+                  echo 'SubState=dead'
+                  echo 'Result='
+                  echo 'ExecMainStatus=0'
+                  ;;
+                *)
+                  echo 'LoadState=loaded'
+                  echo "InvocationID=invocation-$unit"
+                  echo 'ActiveState=active'
+                  echo 'SubState=running'
+                  echo 'Result=success'
+                  echo 'ExecMainStatus=0'
+                  ;;
+              esac
               exit 0
             fi
             if [[ "${{1:-}}" == "stop" ]]; then
@@ -128,13 +186,22 @@ PY
             #!/usr/bin/env bash
             set -euo pipefail
             echo "journalctl:$*" >> {self.calls!s}
+            follow=0
+            for arg in "$@"; do
+              if [[ "$arg" == "-f" ]]; then follow=1; fi
+            done
+            if [[ "$follow" == "1" && "${{JOURNAL_FAKE_MODE:-}}" == "follow-hang" ]]; then
+              echo 'line one'
+              sleep 5
+              exit 0
+            fi
             echo 'line one'
             echo 'line two'
             exit 0
             """,
         )
 
-    def run_omactl(self, *args: str) -> subprocess.CompletedProcess[str]:
+    def run_omactl(self, *args: str, timeout=None) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [str(OMACTL), *args],
             cwd=REPO,
@@ -142,6 +209,7 @@ PY
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            timeout=timeout,
         )
 
     def load_json(self, proc: subprocess.CompletedProcess[str]):
@@ -158,6 +226,7 @@ PY
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["kind"], "omactl.capabilities")
         self.assertIn("query.installed.v1", payload["data"]["capabilities"])
+        self.assertNotIn("query.search.v1", payload["data"]["capabilities"])
         self.assertNotIn("plan.upgrade.v1", payload["data"]["capabilities"])
         self.assertNotIn("run.upgrade.selected.v1", payload["data"]["capabilities"])
 
@@ -175,6 +244,13 @@ PY
         payload = self.load_json(proc)
         self.assertEqual(payload["kind"], "omactl.query.installed")
         self.assertEqual([p["name"] for p in payload["data"]["packages"]], ["nano", "htop"])
+        self.assertEqual(payload["data"]["packages"][0]["branches"], ["stable"])
+        self.assertIsInstance(payload["data"]["packages"][0]["status"], str)
+        self.assertEqual(payload["data"]["packages"][0]["status"], "installed")
+        self.assertEqual(
+            payload["data"]["packages"][1]["status"],
+            "automatic,installed,upgradable",
+        )
         self.assertTrue(payload["data"]["packages"][0]["installed"])
         self.assertTrue(payload["data"]["packages"][1]["upgradable"])
         self.assertTrue(payload["data"]["packages"][1]["automatic"])
@@ -209,6 +285,20 @@ PY
         payload = self.load_json(proc)
         self.assertEqual(payload["error"]["code"], "MALFORMED_DELEGATE_OUTPUT")
 
+    def test_query_installed_missing_branches_returns_malformed_delegate_output(self):
+        self.env["OMA_FAKE_MODE"] = "missing-branches"
+        proc = self.run_omactl("query", "installed", "--json")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "MALFORMED_DELEGATE_OUTPUT")
+
+    def test_query_scalar_delegate_output_returns_malformed_delegate_output(self):
+        self.env["OMA_FAKE_MODE"] = "scalar"
+        proc = self.run_omactl("query", "installed", "--json")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "MALFORMED_DELEGATE_OUTPUT")
+
     def test_query_nonzero_delegate_returns_oma_exec_failed(self):
         self.env["OMA_FAKE_MODE"] = "nonzero"
         proc = self.run_omactl("query", "installed", "--json")
@@ -233,6 +323,14 @@ PY
         self.assertEqual(payload["data"]["operation"], "install")
         argv = json.loads(self.systemd_args.read_text(encoding="utf-8"))
         self.assertEqual(argv[-4:], [self.env["OMA_BIN"], "install", "--yes", hostile_pkg])
+        self.assertNotIn("--collect", argv)
+
+    def test_run_rejects_missing_unit_value(self):
+        proc = self.run_omactl("run", "install", "--json", "--unit")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "INVALID_ARGUMENTS")
+        self.assertFalse(self.systemd_args.exists())
 
     def test_run_rejects_retained_unit_collision(self):
         proc = self.run_omactl("run", "install", "--json", "--unit", "oma-task-test.service", "nano")
@@ -279,6 +377,27 @@ PY
         payload = self.load_json(proc)
         self.assertEqual(payload["data"]["operation"], "upgrade")
 
+    def test_run_upgrade_selected_preencodes_selection_before_scheduling(self):
+        write_exe(
+            self.bin / "python3",
+            """
+            #!/usr/bin/env bash
+            exit 42
+            """,
+        )
+        proc = self.run_omactl("run", "upgrade", "--json", "--unit", "oma-task-selected.service", "nano")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "INTERNAL_ERROR")
+        self.assertFalse(self.systemd_args.exists())
+
+    def test_run_upgrade_selected_reports_selection(self):
+        proc = self.run_omactl("run", "upgrade", "--json", "--unit", "oma-task-selected.service", "nano")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["data"]["operation"], "upgrade")
+        self.assertEqual(payload["data"]["selection"]["requested"], ["nano"])
+
     def test_plan_group_returns_structured_unsupported_command(self):
         proc = self.run_omactl("plan", "upgrade", "--json")
         self.assertNotEqual(proc.returncode, 0)
@@ -300,6 +419,34 @@ PY
         self.assertEqual(payload["kind"], "omactl.unit.result")
         self.assertEqual(payload["data"]["state"], "running")
 
+    def test_status_json_rejects_mismatched_invocation_record(self):
+        self.env["SYSTEMD_FAKE_MODE"] = "mismatch"
+        proc = self.run_omactl("status", "--json", "oma-task-test.service")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "UNKNOWN_UNIT")
+
+    def test_status_json_rejects_collected_or_not_found_unit(self):
+        self.env["SYSTEMD_FAKE_MODE"] = "not-found"
+        proc = self.run_omactl("status", "--json", "oma-task-test.service")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "UNKNOWN_UNIT")
+
+    def test_status_json_maps_failed_state(self):
+        self.env["SYSTEMD_FAKE_MODE"] = "failed"
+        proc = self.run_omactl("status", "--json", "oma-task-test.service")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["data"]["state"], "failed")
+
+    def test_status_json_maps_inactive_empty_result_to_unknown(self):
+        self.env["SYSTEMD_FAKE_MODE"] = "unknown"
+        proc = self.run_omactl("status", "--json", "oma-task-test.service")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["data"]["state"], "unknown")
+
     def test_status_json_rejects_unknown_oma_task_unit(self):
         proc = self.run_omactl("status", "--json", "oma-task-unknown.service")
         self.assertNotEqual(proc.returncode, 0)
@@ -312,6 +459,26 @@ PY
         payload = self.load_json(proc)
         self.assertEqual(payload["kind"], "omactl.unit.logs")
         self.assertEqual(payload["data"]["lines"], ["line one", "line two"])
+
+    def test_follow_logs_closes_after_terminal_state(self):
+        self.env["SYSTEMD_FAKE_MODE"] = "terminal"
+        self.env["JOURNAL_FAKE_MODE"] = "follow-hang"
+        proc = self.run_omactl("logs", "--json", "--follow", "oma-task-test.service", timeout=3)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        lines = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+        self.assertEqual(lines[0]["kind"], "omactl.unit.log-line")
+        self.assertEqual(lines[0]["data"]["line"], "line one")
+
+    def test_symlink_state_dir_is_rejected(self):
+        target = self.root / "unsafe-target"
+        target.mkdir()
+        link = self.root / "unsafe-link"
+        link.symlink_to(target, target_is_directory=True)
+        self.env["OMACTL_STATE_DIR"] = str(link)
+        proc = self.run_omactl("run", "install", "--json", "--unit", "oma-task-unsafe.service", "nano")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "INTERNAL_ERROR")
 
     def test_cancel_json_returns_unit_cancel(self):
         proc = self.run_omactl("cancel", "--json", "oma-task-test.service")
