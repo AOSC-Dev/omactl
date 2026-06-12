@@ -12,8 +12,6 @@ omactl MAY wrap machine-readable `oma list --json` output for `query upgradable`
 
 omactl MAY wrap machine-readable `oma show --json` output for `query package-detail`.
 
-omactl MAY wrap machine-readable `oma search --json` output for `query search`.
-
 When delegated oma JSON is JSON Lines, omactl MUST parse each JSON line as machine-readable data and normalize successful output into the envelope required by this RFC.
 
 When delegated oma JSON is a single JSON document, omactl MUST parse that document as machine-readable data and normalize successful output into the envelope required by this RFC.
@@ -28,7 +26,7 @@ omactl MUST NOT parse human-oriented oma operation output to satisfy `run.*` sch
 
 omactl MUST NOT parse localized, colored, table-formatted, or progress-oriented oma output as a substitute for delegated JSON.
 
-omactl MAY leave plan, TUM, selected-upgrade, search, storage, or other optional capabilities unadvertised until machine-readable delegated JSON or native omactl data sources satisfy this RFC.
+omactl MAY leave plan, TUM, selected-upgrade, storage, or other optional capabilities unadvertised until machine-readable delegated JSON or native omactl data sources satisfy this RFC.
 
 omactl MUST report unsupported delegated oma capabilities as `UNSUPPORTED_COMMAND` or `OMA_EXEC_FAILED` rather than emitting partial success payloads.
 

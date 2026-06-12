@@ -8,7 +8,7 @@ OMACTL_STATE_DIR=${OMACTL_STATE_DIR:-${XDG_RUNTIME_DIR:-/run}/omactl}
 usage(){ cat <<'EOF'
 Usages:
   omactl capabilities --json
-  omactl query installed|upgradable|package-detail|search --json [args...]
+  omactl query installed|upgradable|package-detail --json [args...]
   omactl run <upgrade|install|remove|refresh> --json [--unit <name>] [--yes] [args...]
   omactl run [--wait] [--follow] [--unit=<name>] -- <oma-args...>
   omactl status [--json] <unit>
@@ -420,18 +420,6 @@ query_json(){
         fail_json OMA_EXEC_FAILED "delegated oma command failed"
       fi
       if ! printf '%s\n' "$out" | wrap_json_items omactl.query.package-detail packages name; then
-        fail_json MALFORMED_DELEGATE_OUTPUT "failed to parse delegated oma JSON"
-      fi
-      ;;
-    search)
-      [[ "${1:-}" == "--json" ]] || die "query search requires --json"
-      shift
-      [[ $# -gt 0 ]] || fail_json INVALID_ARGUMENTS "search requires at least one term" '{"argument":"term"}'
-      local out
-      if ! out=$("$OMA_BIN" search --json "$@"); then
-        fail_json OMA_EXEC_FAILED "delegated oma command failed"
-      fi
-      if ! printf '%s\n' "$out" | wrap_json_items omactl.query.search results name; then
         fail_json MALFORMED_DELEGATE_OUTPUT "failed to parse delegated oma JSON"
       fi
       ;;

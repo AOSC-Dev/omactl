@@ -32,18 +32,10 @@ Each package detail object SHOULD include `version`, `architecture`, `summary`, 
 
 Each package detail object SHOULD include `installed` and `upgradable` as booleans when those values are available from oma.
 
-`omactl query search --json <term>...` MAY return kind `omactl.query.search` when `query.search.v1` is advertised.
+`omactl query` MUST NOT provide aoska app-store search or catalog discovery.
 
-`omactl query search --json <term>...` MUST reject an empty search term list with error code `INVALID_ARGUMENTS` when search is supported.
-
-`omactl query search --json <term>...` MUST return `data.results` as an array when search is supported.
-
-Each search result object MUST include `name` as a string.
-
-Each search result object SHOULD include `version`, `architecture`, and `summary` as strings when those values are available from oma.
-
-Each search result object SHOULD include `installed` and `exact_match` as booleans when those values are available from oma.
+`omactl query search --json <term>...` MUST return `UNSUPPORTED_COMMAND` unless a future RFC explicitly reintroduces a non-catalog package-manager search capability.
 
 `omactl query` SHOULD execute without creating a systemd transient unit unless system policy requires a mediated execution context.
 
-**Rationale:** aoska renders package and update state frequently, so read paths must be safe, cheap, explicit, and schema-testable."""
+**Rationale:** aoska renders package and update state frequently, so read paths must be safe, cheap, explicit, and schema-testable. App-store discovery belongs to ASMR catalog metadata because package-manager search cannot represent curated, external, or manual entries."""
