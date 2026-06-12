@@ -71,12 +71,22 @@ Wait and follow logs, blocking the caller:
 ./src/omactl cancel <unit>
 ```
 
-omactl uses `systemd-run` to establish a systemd transient unit. The default
-unit name is `oma-task-<timestamp>-<rand>.service`. You can modify it by passing
-`--unit=<name>` in the legacy human command form or `--unit <name>` in the JSON
-operation form. JSON-mode inspection, logs, and cancellation are limited to
-units retained in the omactl state directory and whose current systemd
-`InvocationID` still matches the retained record.
+omactl itself is a command-line wrapper, not a long-running service unit.
+Operation commands use `systemd-run` to establish a systemd transient unit. The
+default unit name is `oma-task-<timestamp>-<rand>.service`. You can modify it by
+passing `--unit=<name>` in the legacy human command form or `--unit <name>` in
+the JSON operation form.
+
+When called from a graphical session, `systemd-run` may ask polkit to authorize
+starting the transient system unit; the desktop polkit agent is expected to
+present the password prompt. Headless sessions such as SSH may not have such an
+agent, so run commands can fail with a structured `SYSTEMD_FAILED` JSON error.
+`capabilities --json` reports the command surface without triggering an
+authorization prompt.
+
+JSON-mode inspection, logs, and cancellation are limited to units retained in
+the omactl state directory and whose current systemd `InvocationID` still
+matches the retained record.
 
 ## Requirements
 
