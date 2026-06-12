@@ -44,10 +44,14 @@ capabilities that can be implemented from these delegated oma JSON commands:
   `current_version`, and `new_version`.
 - `oma show --json <package>...` with at least `name`.
 
-Search, planning, selected-upgrade capability discovery, and TUM APIs are
+Planning, selected-upgrade planning capability discovery, storage, and TUM APIs are
 intentionally not advertised yet. Until oma exposes the required
-machine-readable data, `omactl plan ... --json` returns an
+machine-readable data, unsupported JSON requests return an
 `UNSUPPORTED_COMMAND` error envelope instead of scraping human output.
+
+`omactl` does not provide aoska app-store search. aoska discovery/search is
+catalog-driven and should consume ASMR (`aosc-os-asmr`) metadata so curated and
+manual entries that are not in AOSC package repositories can appear in the store.
 
 ## Run human-oriented tasks
 

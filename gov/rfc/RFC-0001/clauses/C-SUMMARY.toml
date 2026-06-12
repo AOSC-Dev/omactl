@@ -12,6 +12,6 @@ This RFC specifies the omactl command-line contract consumed by aoska for packag
 
 **Scope:** This RFC covers the aoska-facing `omactl capabilities`, `omactl query`, `omactl plan`, `omactl run`, `omactl status`, `omactl result`, and `omactl logs` surfaces; required command arguments; JSON envelope and payload fields; error codes; exit status; unit identifiers; log streaming; and argument-safety requirements.
 
-**Out of scope:** This RFC does not specify aoska UI behavior, aoska static catalog metadata, oma's internal Rust APIs, or omactl implementation structure beyond the externally observable CLI contract.
+**Out of scope:** This RFC does not specify aoska UI behavior, ASMR/static catalog metadata, app-store search/discovery, oma's internal Rust APIs, or omactl implementation structure beyond the externally observable CLI contract.
 
 **Rationale:** aoska needs a stable GUI-safe integration surface. omactl should mediate process, systemd, and JSON transport concerns while delegating package-management semantics to oma."""

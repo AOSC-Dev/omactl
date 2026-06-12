@@ -413,6 +413,15 @@ PY
         self.assertEqual(package["name"], "oma")
         self.assertEqual(package["package"], "oma")
 
+    def test_query_search_is_not_aoska_facing_api(self):
+        proc = self.run_omactl("query", "search", "--json", "nano")
+        self.assertNotEqual(proc.returncode, 0)
+        payload = self.load_json(proc)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["code"], "UNSUPPORTED_COMMAND")
+        calls = self.calls.read_text(encoding="utf-8") if self.calls.exists() else ""
+        self.assertNotIn("oma:search --json nano", calls)
+
     def test_query_malformed_delegate_output_returns_single_error_envelope(self):
         self.env["OMA_FAKE_MODE"] = "bad-json"
         proc = self.run_omactl("query", "installed", "--json")
