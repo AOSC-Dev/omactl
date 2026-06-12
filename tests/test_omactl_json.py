@@ -328,7 +328,7 @@ PY
         self.assertNotIn("run.upgrade.selected.v1", caps)
         self.assertNotIn("unit.logs.v1", caps)
 
-    def test_capabilities_do_not_advertise_run_when_systemd_run_cannot_schedule(self):
+    def test_capabilities_do_not_probe_run_authorization(self):
         self.env["SYSTEMD_RUN_FAKE_MODE"] = "fail-with-stderr"
         proc = self.run_omactl("capabilities", "--json")
         self.assertEqual(proc.returncode, 0, proc.stderr)
@@ -336,9 +336,10 @@ PY
         payload = self.load_json(proc)
         caps = payload["data"]["capabilities"]
         self.assertIn("query.installed.v1", caps)
-        self.assertNotIn("run.install.v1", caps)
-        self.assertNotIn("run.upgrade.selected.v1", caps)
+        self.assertIn("run.install.v1", caps)
+        self.assertIn("run.upgrade.selected.v1", caps)
         self.assertIn("unit.status.v1", caps)
+        self.assertFalse(self.systemd_args.exists())
 
     def test_capabilities_empty_set_returns_valid_json(self):
         no_tools = self.root / "no-tools"
