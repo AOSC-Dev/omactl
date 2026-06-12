@@ -84,6 +84,10 @@ PY
               echo '{{"name":"nano","branches":["stable"],"current_version":"7.2","new_version":"","architecture":"amd64","status":["installed"]}}'
               exit 0
             fi
+            if [[ "${{OMA_FAKE_MODE:-}}" == "package-field" ]]; then
+              echo '{{"package":"oma","version":"1.26.4","architecture":"amd64","summary":"package manager"}}'
+              exit 0
+            fi
             if [[ "${{OMA_FAKE_MODE:-}}" == "scalar" ]]; then
               echo '"not-an-object"'
               exit 0
@@ -126,6 +130,10 @@ PY
             set -euo pipefail
             if [[ "${{1:-}}" == "--version" ]]; then
               exit 0
+            fi
+            if [[ "${{SYSTEMD_RUN_FAKE_MODE:-}}" == "fail-with-stderr" ]]; then
+              echo 'Failed to start transient service unit: Access denied' >&2
+              exit 1
             fi
             echo "systemd-run:$*" >> {self.calls!s}
             python3 - "$@" > {self.systemd_args!s} <<'PY'
@@ -320,6 +328,18 @@ PY
         self.assertNotIn("run.upgrade.selected.v1", caps)
         self.assertNotIn("unit.logs.v1", caps)
 
+    def test_capabilities_do_not_advertise_run_when_systemd_run_cannot_schedule(self):
+        self.env["SYSTEMD_RUN_FAKE_MODE"] = "fail-with-stderr"
+        proc = self.run_omactl("capabilities", "--json")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stderr, "")
+        payload = self.load_json(proc)
+        caps = payload["data"]["capabilities"]
+        self.assertIn("query.installed.v1", caps)
+        self.assertNotIn("run.install.v1", caps)
+        self.assertNotIn("run.upgrade.selected.v1", caps)
+        self.assertIn("unit.status.v1", caps)
+
     def test_capabilities_empty_set_returns_valid_json(self):
         no_tools = self.root / "no-tools"
         no_tools.mkdir()
@@ -381,6 +401,16 @@ PY
         payload = self.load_json(proc)
         self.assertEqual(payload["kind"], "omactl.query.package-detail")
         self.assertEqual([p["name"] for p in payload["data"]["packages"]], ["nano", "htop"])
+
+    def test_query_package_detail_accepts_oma_package_field_as_name(self):
+        self.env["OMA_FAKE_MODE"] = "package-field"
+        proc = self.run_omactl("query", "package-detail", "--json", "oma")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        payload = self.load_json(proc)
+        self.assertEqual(payload["kind"], "omactl.query.package-detail")
+        package = payload["data"]["packages"][0]
+        self.assertEqual(package["name"], "oma")
+        self.assertEqual(package["package"], "oma")
 
     def test_query_malformed_delegate_output_returns_single_error_envelope(self):
         self.env["OMA_FAKE_MODE"] = "bad-json"
@@ -490,6 +520,15 @@ PY
         payload = self.load_json(proc)
         self.assertEqual(payload["error"]["code"], "SYSTEMD_FAILED")
         self.assertFalse(self.systemd_args.exists())
+
+    def test_run_systemd_failure_keeps_json_stdout_clean(self):
+        self.env["SYSTEMD_RUN_FAKE_MODE"] = "fail-with-stderr"
+        proc = self.run_omactl("run", "install", "--json", "--unit", "oma-task-denied.service", "nano")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertEqual(proc.stderr, "")
+        payload = self.load_json(proc)
+        self.assertEqual(payload["error"]["code"], "SYSTEMD_FAILED")
+        self.assertIn("Access denied", payload["error"]["details"]["stderr"])
 
     def test_legacy_run_still_accepts_oma_args_without_json_mode(self):
         proc = self.run_omactl("run", "install", "--yes", "nano")

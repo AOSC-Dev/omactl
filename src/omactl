@@ -75,6 +75,20 @@ systemd_run_available(){
   command -v systemd-run >/dev/null 2>&1 && systemd-run --version >/dev/null 2>&1
 }
 
+systemd_run_can_schedule(){
+  systemd_run_available || return 1
+  local true_bin unit
+  true_bin=$(command -v true 2>/dev/null) || return 1
+  unit="oma-task-omactl-capability-probe-$$-$RANDOM.service"
+  systemd-run \
+    --quiet \
+    --collect \
+    --unit="$unit" \
+    -p Type=exec \
+    -p WorkingDirectory=/ \
+    "$true_bin" >/dev/null 2>&1
+}
+
 require_systemctl(){
   systemctl_available || fail_json SYSTEMD_FAILED "systemctl is required to retain omactl unit ownership"
 }
@@ -267,6 +281,8 @@ for item in items:
     if required and not isinstance(item, dict):
         raise ValueError("non-object item in delegated JSON")
     if isinstance(item, dict):
+        if "name" not in item and isinstance(item.get("package"), str):
+            item["name"] = item["package"]
         status_values = set(status_tokens(item.get("status")))
         if kind == "omactl.query.installed":
             status_values.add("installed")
@@ -361,7 +377,7 @@ capabilities_json(){
     if command -v python3 >/dev/null 2>&1; then
       caps+=("query.installed.v1" "query.upgradable.v1" "query.package-detail.v1")
     fi
-    if systemd_run_available && systemctl_available; then
+    if systemd_run_can_schedule && systemctl_available; then
       caps+=("run.upgrade.v1" "run.install.v1" "run.remove.v1" "run.refresh.v1")
       if command -v python3 >/dev/null 2>&1; then
         caps+=("run.upgrade.selected.v1")
@@ -544,8 +560,9 @@ run_json(){
     -p WorkingDirectory=/
     -p PrivateTmp=yes
   )
-  if ! systemd-run "${run_args[@]}" "$OMA_BIN" "${oma_args[@]}" >/dev/null; then
-    fail_json SYSTEMD_FAILED "failed to schedule systemd unit" "{\"unit\":$(json_escape "$unit")}"
+  local schedule_stderr
+  if ! schedule_stderr=$(systemd-run "${run_args[@]}" "$OMA_BIN" "${oma_args[@]}" 2>&1 >/dev/null); then
+    fail_json SYSTEMD_FAILED "failed to schedule systemd unit" "{\"unit\":$(json_escape "$unit"),\"stderr\":$(json_escape "$schedule_stderr")}"
   fi
   record_unit "$unit" "$operation"
   local data
